@@ -1,0 +1,64 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build output
+dist/
+dist-ssr/
+build/
+coverage/
+backend/coverage/
+frontend/coverage/
+*.tsbuildinfo
+*.local
+
+# Environment variables
+.env
+.env.*
+!.env.example
+!.env.*.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Editor directories and OS files
+.vscode/*
+!.vscode/extensions.json
+.cursor/
+.claude/
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Backend runtime data
+backend/data/*
+!backend/data/.gitkeep
+
+backend/uploads/*
+!backend/uploads/.gitkeep
+!backend/uploads/tmp/.gitkeep
+!backend/uploads/videos/.gitkeep
+!backend/uploads/transcodes/.gitkeep
+!backend/uploads/thumbnails/.gitkeep
+!backend/uploads/thumbnails-sm/.gitkeep
+
+# Root runtime directories for Docker/local runs
+data/
+uploads/
+
+# Reports and local analysis artifacts
+reports/
+.lighthouseci/
+codeql-db/
+codeql-reports/
