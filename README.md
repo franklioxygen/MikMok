@@ -1,4 +1,6 @@
-# ![MikMok Logo](frontend/src/assets/images/logo.png)
+<p align="center">
+  <img src="frontend/src/assets/images/logo.png" alt="MikMok Logo" width="200" height="200" />
+</p>
 
 # MikMok
 
@@ -6,7 +8,9 @@ MikMok is a self-hosted short-video app for local disks and NAS libraries. It op
 
 [中文](README-zh.md)
 
-<img width="407" height="720" alt="ezgif-440f519fc770aeca" src="https://github.com/user-attachments/assets/b91292fd-4f47-4657-8ae0-cec552046cb4" />
+<p align="center">
+  <img width="407" height="720" alt="MikMok preview" src="https://github.com/user-attachments/assets/b91292fd-4f47-4657-8ae0-cec552046cb4" />
+</p>
 
 
 ## Features
@@ -57,4 +61,3 @@ Typical container mounts:
 - [API Endpoints](documents/api-endpoints.md)
 - [Getting Started](documents/getting-started.md)
 - [Directory Structure](documents/directory-structure.md)
-
