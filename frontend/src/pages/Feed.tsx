@@ -1,5 +1,6 @@
 import { startTransition, useEffect, useMemo, useRef, useState } from "react";
 import type { MouseEvent, PointerEvent, VideoHTMLAttributes, WheelEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 
 import { apiBaseUrl, apiRequest } from "../api/client";
 import { useUiStore } from "../store/uiStore";
@@ -67,10 +68,7 @@ type FeedScrubState = {
 };
 
 const accentClasses = ["ember", "shore", "canopy"] as const;
-const favoriteVideoIdsStorageKey = "mikmok.favorite-video-ids";
-const lastActiveVideoIdStorageKey = "mikmok.last-active-video-id";
 const playbackRateOptions = [0.5, 0.75, 1, 1.25, 1.5, 2] as const;
-const playbackRateStorageKey = "mikmok.playback-rate";
 const stageTransitionDurationMs = 220;
 
 type StageDirection = "next" | "prev" | "snap" | null;
@@ -173,7 +171,7 @@ function ActionIcon({ name }: { name: "favorite" | "favoriteFilled" | "info" | "
       return (
         <svg aria-hidden="true" className="feed-side-action__icon" viewBox="0 0 24 24">
           <path
-            d="M12 5.25a8 8 0 1 0 8 8c0-.66-.08 1.62-.24 2.25H17.7a5.9 5.9 0 1 1-1.82-6.38l-1.56 1.56a3.75 3.75 0 1 0 1.06 1.06l4.1-4.1V10h1.5V5.25H16.2v1.5h2.32l-3.47 3.47A5.93 5.93 0 0 0 12 9a4.25 4.25 0 1 0 4.24 4.5H14.7A2.75 2.75 0 1 1 12 10.5c.59 0 1.14.18 1.6.49l-2.13 2.13 1.06 1.06 3.32-3.32A5.9 5.9 0 0 1 17.25 13c0 .17-.01.33-.03.5h2.27c.01-.17.01-.33.01-.5a8 8 0 0 0-8-8Z"
+            d="m4.75 6.4 6.2 5.1-6.2 5.1V6.4Zm7.1 0 6.2 5.1-6.2 5.1V6.4Z"
             fill="currentColor"
           />
         </svg>
@@ -181,10 +179,25 @@ function ActionIcon({ name }: { name: "favorite" | "favoriteFilled" | "info" | "
   }
 }
 
-function PauseIcon() {
+function PlayIcon() {
   return (
     <svg aria-hidden="true" className="feed-screen__pause-icon" viewBox="0 0 24 24">
-      <path d="M8.25 6.5h2.9v11h-2.9zm4.6 0h2.9v11h-2.9z" fill="currentColor" />
+      <path d="M8.35 6.7c0-.82.9-1.32 1.6-.88l7.18 4.62a1.05 1.05 0 0 1 0 1.76l-7.18 4.62c-.7.45-1.6-.05-1.6-.88V6.7Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function LoadingIcon() {
+  return (
+    <svg aria-hidden="true" className="feed-screen__loading-icon" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="8.25" fill="none" opacity="0.22" stroke="currentColor" strokeWidth="2.2" />
+      <path
+        d="M12 3.75A8.25 8.25 0 0 1 20.25 12"
+        fill="none"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeWidth="2.2"
+      />
     </svg>
   );
 }
@@ -194,6 +207,7 @@ function FeedStageCard({
   clip,
   isActive,
   isMuted,
+  shouldLoop,
   playbackRate,
   preloadMode,
   videoProps,
@@ -203,6 +217,7 @@ function FeedStageCard({
   clip: FeedVideo;
   isActive: boolean;
   isMuted: boolean;
+  shouldLoop: boolean;
   playbackRate: number;
   preloadMode: "auto" | "metadata" | "none";
   videoProps?: VideoHTMLAttributes<HTMLVideoElement>;
@@ -247,7 +262,7 @@ function FeedStageCard({
         autoPlay={isActive}
         className="feed-stage-card__video"
         data-clip-id={clip.id}
-        loop={isActive}
+        loop={isActive && shouldLoop}
         muted={isActive ? isMuted : true}
         playsInline
         poster={clip.thumbnailSmUrl ?? undefined}
@@ -265,26 +280,44 @@ function FeedStageCard({
 }
 
 export function FeedPage() {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const activeFeedIndex = useUiStore((state) => state.activeFeedIndex);
   const feedControlsVisible = useUiStore((state) => state.feedControlsVisible);
+  const feedSnapshot = useUiStore((state) => state.feedSnapshot);
+  const favoriteIds = useUiStore((state) => state.favoriteIds);
+  const lastActiveVideoId = useUiStore((state) => state.lastActiveVideoId);
   const isMuted = useUiStore((state) => state.isMuted);
+  const playbackCompletionMode = useUiStore((state) => state.playbackCompletionMode);
+  const playbackRate = useUiStore((state) => state.playbackRate);
+  const preferencesLoaded = useUiStore((state) => state.preferencesLoaded);
+  const resumePositionByVideoId = useUiStore((state) => state.resumePositionByVideoId);
+  const setMuted = useUiStore((state) => state.setMuted);
   const setFeedControlsVisible = useUiStore((state) => state.setFeedControlsVisible);
+  const setFeedSnapshot = useUiStore((state) => state.setFeedSnapshot);
   const setActiveFeedIndex = useUiStore((state) => state.setActiveFeedIndex);
+  const setLastActiveVideoId = useUiStore((state) => state.setLastActiveVideoId);
+  const setPlaybackRate = useUiStore((state) => state.setPlaybackRate);
+  const setResumePositionForVideo = useUiStore((state) => state.setResumePositionForVideo);
+  const soundOnOpen = useUiStore((state) => state.soundOnOpen);
+  const toggleFavoriteId = useUiStore((state) => state.toggleFavoriteId);
   const toggleMute = useUiStore((state) => state.toggleMute);
-  const [clips, setClips] = useState<FeedVideo[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [clips, setClips] = useState<FeedVideo[]>(feedSnapshot);
+  const [loading, setLoading] = useState(feedSnapshot.length === 0);
   const [error, setError] = useState<string | null>(null);
   const [activeClipDetails, setActiveClipDetails] = useState<FeedVideoDetails | null>(null);
-  const [favoriteIds, setFavoriteIds] = useState<string[]>([]);
-  const [favoritesReady, setFavoritesReady] = useState(false);
+  const [isActiveVideoLoading, setIsActiveVideoLoading] = useState(false);
   const [isActiveVideoPaused, setIsActiveVideoPaused] = useState(false);
-  const [playbackRate, setPlaybackRate] = useState(1);
+  const [isPauseHudVisible, setIsPauseHudVisible] = useState(false);
+  const [isPauseHudLeaving, setIsPauseHudLeaving] = useState(false);
+  const [currentPlaybackSeconds, setCurrentPlaybackSeconds] = useState(0);
   const [snackbar, setSnackbar] = useState<FeedSnackbarState | null>(null);
   const [scrubState, setScrubState] = useState<FeedScrubState | null>(null);
   const [dragOffsetY, setDragOffsetY] = useState(0);
   const [showPlaybackRateMenu, setShowPlaybackRateMenu] = useState(false);
   const [showInfoCard, setShowInfoCard] = useState(false);
   const [stageTransition, setStageTransition] = useState<StageDirection>(null);
+  const requestedVideoId = searchParams.get("video");
   const pointerStartXRef = useRef<number | null>(null);
   const pointerStartYRef = useRef<number | null>(null);
   const activePointerIdRef = useRef<number | null>(null);
@@ -293,6 +326,9 @@ export function FeedPage() {
   const transitionTimerRef = useRef<number | null>(null);
   const controlsHideTimerRef = useRef<number | null>(null);
   const nextClipWarmTimerRef = useRef<number | null>(null);
+  const playbackRateCorrectionTimerRef = useRef<number | null>(null);
+  const loadingOverlayTimerRef = useRef<number | null>(null);
+  const pauseHudTimerRef = useRef<number | null>(null);
   const snackbarTimerRef = useRef<number | null>(null);
   const activeVideoRef = useRef<HTMLVideoElement | null>(null);
   const stageVideoRefs = useRef<Record<StageRole, HTMLVideoElement | null>>({
@@ -301,6 +337,9 @@ export function FeedPage() {
     next: null
   });
   const playStartedForVideoIdRef = useRef<string | null>(null);
+  const endingVideoIdRef = useRef<string | null>(null);
+  const handledRequestedVideoIdRef = useRef<string | null>(null);
+  const restoredLastActiveVideoIdRef = useRef<string | null>(null);
   const progressReportedAtSecondRef = useRef<number>(0);
   const resumeAppliedForVideoIdRef = useRef<string | null>(null);
   const scrubStartTimeRef = useRef(0);
@@ -310,65 +349,17 @@ export function FeedPage() {
   const warmedClipIdsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
-    try {
-      const storedFavoriteIds = window.localStorage.getItem(favoriteVideoIdsStorageKey);
-
-      if (storedFavoriteIds) {
-        const parsedIds = JSON.parse(storedFavoriteIds) as unknown;
-
-        if (Array.isArray(parsedIds)) {
-          setFavoriteIds(parsedIds.filter((value): value is string => typeof value === "string"));
-        }
-      }
-    } catch {
-      // Ignore local storage read failures and keep ephemeral favorites.
-    } finally {
-      setFavoritesReady(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!favoritesReady) {
-      return;
-    }
-
-    try {
-      window.localStorage.setItem(favoriteVideoIdsStorageKey, JSON.stringify(favoriteIds));
-    } catch {
-      // Ignore local storage write failures and keep in-memory favorites.
-    }
-  }, [favoriteIds, favoritesReady]);
-
-  useEffect(() => {
-    try {
-      const storedPlaybackRate = window.localStorage.getItem(playbackRateStorageKey);
-
-      if (!storedPlaybackRate) {
-        return;
-      }
-
-      const parsedPlaybackRate = Number.parseFloat(storedPlaybackRate);
-
-      if (playbackRateOptions.includes(parsedPlaybackRate as (typeof playbackRateOptions)[number])) {
-        setPlaybackRate(parsedPlaybackRate);
-      }
-    } catch {
-      // Ignore local storage read failures and keep default playback rate.
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(playbackRateStorageKey, String(playbackRate));
-    } catch {
-      // Ignore local storage write failures and keep in-memory playback rate.
-    }
-  }, [playbackRate]);
+    setMuted(!soundOnOpen);
+  }, [setMuted, soundOnOpen]);
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadFeed() {
+      if (feedSnapshot.length === 0) {
+        setLoading(true);
+      }
+
       try {
         const videos = await apiRequest<FeedVideo[]>("/videos/feed");
 
@@ -376,21 +367,8 @@ export function FeedPage() {
           return;
         }
 
-        try {
-          const storedActiveVideoId = window.localStorage.getItem(lastActiveVideoIdStorageKey);
-
-          if (storedActiveVideoId) {
-            const storedVideoIndex = videos.findIndex((video) => video.id === storedActiveVideoId);
-
-            if (storedVideoIndex >= 0) {
-              setActiveFeedIndex(storedVideoIndex);
-            }
-          }
-        } catch {
-          // Ignore local storage read failures and fall back to the default feed index.
-        }
-
         setClips(videos);
+        setFeedSnapshot(videos);
         setError(null);
       } catch (loadError) {
         if (!cancelled) {
@@ -408,7 +386,7 @@ export function FeedPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [setFeedSnapshot]);
 
   const normalizedFeedIndex = useMemo(() => {
     if (clips.length === 0) {
@@ -426,20 +404,60 @@ export function FeedPage() {
     activeClipDetails?.durationSeconds ??
     activeClip?.durationSeconds ??
     null;
+  const activeSessionResumeSeconds = activeClip ? (resumePositionByVideoId[activeClip.id] ?? 0) : 0;
   const previousClip = clips.length > 1 ? clips[(normalizedFeedIndex - 1 + clips.length) % clips.length] ?? null : activeClip;
   const nextClip = clips.length > 1 ? clips[(normalizedFeedIndex + 1) % clips.length] ?? null : activeClip;
+
+  useEffect(() => {
+    if (!requestedVideoId || clips.length === 0 || handledRequestedVideoIdRef.current === requestedVideoId) {
+      return;
+    }
+
+    if (restoredLastActiveVideoIdRef.current === null) {
+      restoredLastActiveVideoIdRef.current = "__requested__";
+    }
+
+    const targetVideoIndex = clips.findIndex((video) => video.id === requestedVideoId);
+
+    if (targetVideoIndex >= 0 && targetVideoIndex !== normalizedFeedIndex) {
+      setActiveFeedIndex(targetVideoIndex);
+    }
+
+    handledRequestedVideoIdRef.current = requestedVideoId;
+    navigate("/feed", { replace: true });
+  }, [clips, navigate, normalizedFeedIndex, requestedVideoId, setActiveFeedIndex]);
+
+  useEffect(() => {
+    if (!requestedVideoId) {
+      handledRequestedVideoIdRef.current = null;
+    }
+  }, [requestedVideoId]);
+
+  useEffect(() => {
+    if (!preferencesLoaded || clips.length === 0 || requestedVideoId || restoredLastActiveVideoIdRef.current !== null) {
+      return;
+    }
+
+    restoredLastActiveVideoIdRef.current = lastActiveVideoId ?? "__empty__";
+
+    if (!lastActiveVideoId) {
+      return;
+    }
+
+    const targetVideoIndex = clips.findIndex((video) => video.id === lastActiveVideoId);
+
+    if (targetVideoIndex >= 0 && targetVideoIndex !== normalizedFeedIndex) {
+      setActiveFeedIndex(targetVideoIndex);
+    }
+  }, [clips, lastActiveVideoId, normalizedFeedIndex, preferencesLoaded, requestedVideoId, setActiveFeedIndex]);
 
   useEffect(() => {
     if (!activeClip) {
       return;
     }
 
-    try {
-      window.localStorage.setItem(lastActiveVideoIdStorageKey, activeClip.id);
-    } catch {
-      // Ignore local storage write failures and keep in-memory active clip.
-    }
-  }, [activeClip?.id]);
+    setLastActiveVideoId(activeClip.id);
+  }, [activeClip?.id, setLastActiveVideoId]);
 
   const stageCards = activeClip
     ? [
@@ -494,11 +512,15 @@ export function FeedPage() {
     }
 
     playStartedForVideoIdRef.current = null;
+    endingVideoIdRef.current = null;
     progressReportedAtSecondRef.current = 0;
     resumeAppliedForVideoIdRef.current = null;
     clearNextClipWarmTimer();
+    clearPlaybackRateCorrectionTimer();
     setShowPlaybackRateMenu(false);
+    setIsActiveVideoLoading(true);
     setIsActiveVideoPaused(false);
+    setCurrentPlaybackSeconds(0);
     setFeedControlsVisible(true);
 
     void loadDetails();
@@ -563,6 +585,27 @@ export function FeedPage() {
     }
   }
 
+  function clearPlaybackRateCorrectionTimer() {
+    if (playbackRateCorrectionTimerRef.current !== null) {
+      window.clearTimeout(playbackRateCorrectionTimerRef.current);
+      playbackRateCorrectionTimerRef.current = null;
+    }
+  }
+
+  function clearLoadingOverlayTimer() {
+    if (loadingOverlayTimerRef.current !== null) {
+      window.clearTimeout(loadingOverlayTimerRef.current);
+      loadingOverlayTimerRef.current = null;
+    }
+  }
+
+  function clearPauseHudTimer() {
+    if (pauseHudTimerRef.current !== null) {
+      window.clearTimeout(pauseHudTimerRef.current);
+      pauseHudTimerRef.current = null;
+    }
+  }
+
   function scheduleControlsHide() {
     clearControlsHideTimer();
 
@@ -606,11 +649,11 @@ export function FeedPage() {
     }, 1800);
   }
 
-  function persistProgressForVideo(videoId: string, positionSeconds: number) {
+  function persistProgressForVideo(videoId: string, positionSeconds: number, completed = false) {
     return apiRequest<PlaybackSnapshot>(`/videos/${videoId}/progress`, {
       method: "POST",
       body: JSON.stringify({
-        completed: false,
+        completed,
         positionSeconds
       })
     })
@@ -672,33 +715,7 @@ export function FeedPage() {
 
     warmedClipIdsRef.current.add(upcomingClipId);
     nextVideoElement.preload = "auto";
-
-    if (nextVideoElement.networkState === HTMLMediaElement.NETWORK_EMPTY) {
-      nextVideoElement.load();
-    }
-
-    if (nextVideoElement.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
-      return;
-    }
-
-    void nextVideoElement.play().then(
-      () => {
-        window.setTimeout(() => {
-          if (stageVideoRefs.current.next !== nextVideoElement || nextVideoElement.dataset.clipId !== upcomingClipId) {
-            return;
-          }
-
-          if (!nextVideoElement.paused) {
-            nextVideoElement.pause();
-          }
-
-          if (Number.isFinite(nextVideoElement.duration) && nextVideoElement.currentTime > 0) {
-            nextVideoElement.currentTime = 0;
-          }
-        }, 160);
-      },
-      () => undefined
-    );
+    nextVideoElement.load();
   }
 
   function scheduleNextClipWarm() {
@@ -946,16 +963,40 @@ export function FeedPage() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [normalizedFeedIndex, clips.length, showInfoCard, stageTransition]);
+  }, [clips.length, normalizedFeedIndex, showInfoCard, stageTransition]);
 
   useEffect(() => {
     return () => {
       clearPendingTransition();
       clearControlsHideTimer();
       clearNextClipWarmTimer();
+      clearPlaybackRateCorrectionTimer();
+      clearLoadingOverlayTimer();
+      clearPauseHudTimer();
       clearSnackbarTimer();
     };
   }, []);
+
+  useEffect(() => {
+    if (isActiveVideoPaused && !scrubState) {
+      clearPauseHudTimer();
+      setIsPauseHudLeaving(false);
+      setIsPauseHudVisible(true);
+      return;
+    }
+
+    if (!isPauseHudVisible) {
+      return;
+    }
+
+    clearPauseHudTimer();
+    setIsPauseHudLeaving(true);
+    pauseHudTimerRef.current = window.setTimeout(() => {
+      setIsPauseHudLeaving(false);
+      setIsPauseHudVisible(false);
+      pauseHudTimerRef.current = null;
+    }, 180);
+  }, [isActiveVideoPaused, isPauseHudVisible, scrubState]);
 
   useEffect(() => {
     if (!activeClipDetails || !activeVideoRef.current || resumeAppliedForVideoIdRef.current === activeClipDetails.id) {
@@ -971,6 +1012,8 @@ export function FeedPage() {
     const currentClipId = activeClip?.id;
 
     return () => {
+      clearLoadingOverlayTimer();
+
       if (!currentClipId || !activeVideoRef.current) {
         return;
       }
@@ -981,9 +1024,10 @@ export function FeedPage() {
         return;
       }
 
+      setResumePositionForVideo(currentClipId, currentTime);
       void persistProgressForVideo(currentClipId, currentTime);
     };
-  }, [activeClip?.id]);
+  }, [activeClip?.id, setResumePositionForVideo]);
 
   useEffect(() => {
     function handlePageHide() {
@@ -994,12 +1038,7 @@ export function FeedPage() {
         return;
       }
 
-      try {
-        window.localStorage.setItem(lastActiveVideoIdStorageKey, currentClipId);
-      } catch {
-        // Ignore local storage write failures and keep in-memory active clip.
-      }
-
+      setResumePositionForVideo(currentClipId, currentTime);
       persistProgressDuringPageHide(currentClipId, currentTime);
     }
 
@@ -1008,7 +1047,7 @@ export function FeedPage() {
     return () => {
       window.removeEventListener("pagehide", handlePageHide);
     };
-  }, [activeClip?.id]);
+  }, [activeClip?.id, setResumePositionForVideo]);
 
   async function requestWakeLock() {
     const wakeLockNavigator = navigator as Navigator & {
@@ -1063,6 +1102,8 @@ export function FeedPage() {
   }, []);
 
   function handleActiveVideoPlay() {
+    clearLoadingOverlayTimer();
+    setIsActiveVideoLoading(false);
     setIsActiveVideoPaused(false);
     void requestWakeLock();
     scheduleControlsHide();
@@ -1096,11 +1137,24 @@ export function FeedPage() {
   }
 
   function handleActiveVideoPause() {
+    clearLoadingOverlayTimer();
     setIsActiveVideoPaused(true);
     const currentClipId = activeClip?.id;
     const currentTime = activeVideoRef.current?.currentTime ?? Number.NaN;
 
+    if (currentClipId && endingVideoIdRef.current === currentClipId) {
+      endingVideoIdRef.current = null;
+      clearControlsHideTimer();
+      clearNextClipWarmTimer();
+      setScrubState(null);
+      setFeedControlsVisible(true);
+      void releaseWakeLock();
+      return;
+    }
+
     if (currentClipId && Number.isFinite(currentTime) && currentTime > 0) {
+      setCurrentPlaybackSeconds(currentTime);
+      setResumePositionForVideo(currentClipId, currentTime);
       void persistProgressForVideo(currentClipId, currentTime);
     }
 
@@ -1120,17 +1174,84 @@ export function FeedPage() {
       return;
     }
 
-    const resumePosition = activeClipDetails.resumePositionSeconds;
+    const resumePosition = Math.max(activeClipDetails.resumePositionSeconds, activeSessionResumeSeconds);
     const duration = activeVideoRef.current.duration;
 
     if (!Number.isFinite(duration) || resumePosition <= 0 || resumePosition >= Math.max(duration - 1, 1)) {
+      setCurrentPlaybackSeconds(Number.isFinite(activeVideoRef.current.currentTime) ? activeVideoRef.current.currentTime : 0);
       resumeAppliedForVideoIdRef.current = activeClip.id;
       return;
     }
 
     activeVideoRef.current.currentTime = resumePosition;
+    setCurrentPlaybackSeconds(resumePosition);
     resumeAppliedForVideoIdRef.current = activeClip.id;
     progressReportedAtSecondRef.current = Math.floor(resumePosition);
+  }
+
+  function handleActiveVideoLoadStart() {
+    clearLoadingOverlayTimer();
+    setIsActiveVideoLoading(true);
+  }
+
+  function handleActiveVideoCanRender() {
+    clearLoadingOverlayTimer();
+    setIsActiveVideoLoading(false);
+  }
+
+  function scheduleLoadingOverlayIfPlaybackStalls() {
+    const activeVideoElement = activeVideoRef.current;
+    const currentClipId = activeClip?.id;
+
+    clearLoadingOverlayTimer();
+
+    if (!activeVideoElement || !currentClipId || activeVideoElement.paused || scrubState) {
+      return;
+    }
+
+    const waitingPositionSeconds = Number.isFinite(activeVideoElement.currentTime) ? activeVideoElement.currentTime : 0;
+
+    loadingOverlayTimerRef.current = window.setTimeout(() => {
+      const videoElement = activeVideoRef.current;
+
+      loadingOverlayTimerRef.current = null;
+
+      if (!videoElement || videoElement.dataset.clipId !== currentClipId || videoElement.paused) {
+        return;
+      }
+
+      const nextPositionSeconds = Number.isFinite(videoElement.currentTime) ? videoElement.currentTime : waitingPositionSeconds;
+
+      if (
+        videoElement.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA ||
+        nextPositionSeconds > waitingPositionSeconds + 0.12
+      ) {
+        return;
+      }
+
+      setIsActiveVideoLoading(true);
+    }, 420);
+  }
+
+  function handleActiveVideoWaiting() {
+    if (scrubState) {
+      return;
+    }
+
+    scheduleLoadingOverlayIfPlaybackStalls();
+  }
+
+  function handleActiveVideoStalled() {
+    if (scrubState) {
+      return;
+    }
+
+    scheduleLoadingOverlayIfPlaybackStalls();
+  }
+
+  function handleActiveVideoError() {
+    clearLoadingOverlayTimer();
+    setIsActiveVideoLoading(false);
   }
 
   function handleActiveVideoTimeUpdate() {
@@ -1138,7 +1259,13 @@ export function FeedPage() {
       return;
     }
 
+    if (isActiveVideoLoading) {
+      clearLoadingOverlayTimer();
+      setIsActiveVideoLoading(false);
+    }
+
     const currentSecond = Math.floor(activeVideoRef.current.currentTime);
+    setCurrentPlaybackSeconds(activeVideoRef.current.currentTime);
 
     if (currentSecond < progressReportedAtSecondRef.current) {
       progressReportedAtSecondRef.current = currentSecond;
@@ -1173,6 +1300,37 @@ export function FeedPage() {
       .catch(() => undefined);
   }
 
+  function handleActiveVideoEnded() {
+    if (!activeClip || !activeVideoRef.current) {
+      return;
+    }
+
+    clearLoadingOverlayTimer();
+    endingVideoIdRef.current = activeClip.id;
+    const finalPositionSeconds = Number.isFinite(activeVideoRef.current.duration)
+      ? activeVideoRef.current.duration
+      : activeVideoRef.current.currentTime;
+
+    if (Number.isFinite(finalPositionSeconds) && finalPositionSeconds > 0) {
+      setCurrentPlaybackSeconds(finalPositionSeconds);
+      setResumePositionForVideo(activeClip.id, 0);
+      void persistProgressForVideo(activeClip.id, finalPositionSeconds, true);
+    }
+
+    clearNextClipWarmTimer();
+    clearControlsHideTimer();
+    setFeedControlsVisible(true);
+    void releaseWakeLock();
+
+    if (playbackCompletionMode === "next" && clips.length > 1 && !stageTransition) {
+      setIsActiveVideoPaused(false);
+      finishStageTransition("next");
+      return;
+    }
+
+    setIsActiveVideoPaused(true);
+  }
+
   function handleFavoriteToggle() {
     if (!activeClip) {
       return;
@@ -1180,15 +1338,45 @@ export function FeedPage() {
 
     showControlsTemporarily();
     const willFavorite = !favoriteIds.includes(activeClip.id);
-
-    setFavoriteIds((current) =>
-      current.includes(activeClip.id) ? current.filter((videoId) => videoId !== activeClip.id) : [...current, activeClip.id]
-    );
+    toggleFavoriteId(activeClip.id);
     showSnackbar(willFavorite ? "Added to favorites" : "Removed from favorites");
   }
 
   function handlePlaybackRateChange(nextPlaybackRate: number) {
     showControlsTemporarily();
+    clearPlaybackRateCorrectionTimer();
+
+    const activeVideoElement = activeVideoRef.current;
+    const previousTime =
+      activeVideoElement && Number.isFinite(activeVideoElement.currentTime) ? activeVideoElement.currentTime : null;
+    const wasPlaying = !!activeVideoElement && !activeVideoElement.paused;
+
+    if (activeVideoElement) {
+      activeVideoElement.defaultPlaybackRate = nextPlaybackRate;
+      activeVideoElement.playbackRate = nextPlaybackRate;
+
+      playbackRateCorrectionTimerRef.current = window.setTimeout(() => {
+        if (activeVideoRef.current !== activeVideoElement) {
+          playbackRateCorrectionTimerRef.current = null;
+          return;
+        }
+
+        if (
+          previousTime !== null &&
+          Number.isFinite(activeVideoElement.currentTime) &&
+          activeVideoElement.currentTime + 0.75 < previousTime
+        ) {
+          activeVideoElement.currentTime = previousTime;
+        }
+
+        if (wasPlaying && activeVideoElement.paused) {
+          void activeVideoElement.play().catch(() => undefined);
+        }
+
+        playbackRateCorrectionTimerRef.current = null;
+      }, 180);
+    }
+
     setPlaybackRate(nextPlaybackRate);
     setShowPlaybackRateMenu(false);
   }
@@ -1233,10 +1421,20 @@ export function FeedPage() {
 
   const activeVideoProps: VideoHTMLAttributes<HTMLVideoElement> | undefined = activeClip
     ? {
+        onCanPlay: handleActiveVideoCanRender,
+        onCanPlayThrough: handleActiveVideoCanRender,
+        onEnded: handleActiveVideoEnded,
+        onError: handleActiveVideoError,
+        onLoadedData: handleActiveVideoCanRender,
         onLoadedMetadata: handleLoadedMetadata,
+        onLoadStart: handleActiveVideoLoadStart,
         onPause: handleActiveVideoPause,
         onPlay: handleActiveVideoPlay,
-        onTimeUpdate: handleActiveVideoTimeUpdate
+        onPlaying: handleActiveVideoCanRender,
+        onSeeked: handleActiveVideoCanRender,
+        onStalled: handleActiveVideoStalled,
+        onTimeUpdate: handleActiveVideoTimeUpdate,
+        onWaiting: handleActiveVideoWaiting
       }
     : undefined;
 
@@ -1310,10 +1508,53 @@ export function FeedPage() {
             </div>
           </div>
         ) : null}
+        {isPauseHudVisible && !scrubState ? (
+          <div
+            className={
+              isPauseHudLeaving
+                ? "feed-screen__pause-progress feed-screen__pause-progress--leaving"
+                : "feed-screen__pause-progress"
+            }
+            role="status"
+            aria-live="off"
+          >
+            <p className="feed-screen__pause-progress-title">{activeClip.sourceName}</p>
+            <p className="feed-screen__pause-progress-time">
+              {formatPlaybackTime(currentPlaybackSeconds)}
+              {activeDurationSeconds ? ` / ${formatPlaybackTime(activeDurationSeconds)}` : ""}
+            </p>
+            <div className="feed-screen__pause-progress-track" aria-hidden="true">
+              <span
+                className="feed-screen__pause-progress-fill"
+                style={{
+                  width: activeDurationSeconds
+                    ? `${Math.min(Math.max((currentPlaybackSeconds / activeDurationSeconds) * 100, 0), 100)}%`
+                    : "0%"
+                }}
+              />
+            </div>
+          </div>
+        ) : null}
         {isActiveVideoPaused && !scrubState ? (
           <div className="feed-screen__pause-indicator" aria-hidden="true">
             <span className="feed-screen__pause-indicator-badge">
-              <PauseIcon />
+              <PlayIcon />
+            </span>
+          </div>
+        ) : null}
+        {isActiveVideoLoading && !isActiveVideoPaused && !scrubState ? (
+          <div className="feed-screen__loading-overlay" role="status" aria-live="polite">
+            <div
+              aria-hidden="true"
+              className="feed-screen__loading-poster"
+              style={{
+                backgroundImage: activeClipDetails?.thumbnailUrl ?? activeClip.thumbnailSmUrl
+                  ? `url("${activeClipDetails?.thumbnailUrl ?? activeClip.thumbnailSmUrl}")`
+                  : undefined
+              }}
+            />
+            <span className="feed-screen__loading-badge">
+              <LoadingIcon />
             </span>
           </div>
         ) : null}
@@ -1342,6 +1583,7 @@ export function FeedPage() {
                 key={card.key}
                 playbackRate={playbackRate}
                 preloadMode={card.preloadMode}
+                shouldLoop={playbackCompletionMode === "repeat"}
                 videoProps={card.isActive ? activeVideoProps : undefined}
                 videoRef={(node) => {
                   stageVideoRefs.current[card.role] = node;
@@ -1444,9 +1686,6 @@ export function FeedPage() {
               <div className="feed-panel__meta">
                 <p className="eyebrow">For You</p>
                 <h1>{activeClip.title}</h1>
-                <p className="feed-panel__caption">
-                  {activeClip.folderName} source clip ready for playback. Swipe vertically to keep browsing.
-                </p>
                 <div className="tag-row">
                   <span className="pill">#{activeClip.folderName}</span>
                   <span className="pill">{activeClip.mimeType}</span>

@@ -73,6 +73,10 @@ type FolderVideoCountRow = {
   video_count: number;
 };
 
+type VideoIdRow = {
+  id: string;
+};
+
 type UpdatePlaybackArtifactsInput = {
   playbackPath: string | null;
   playbackStatus: PlaybackStatus;
@@ -238,9 +242,60 @@ class VideoIndexService {
     return rows.map((row) => normalizeIndexedVideo(row));
   }
 
+  listPendingTranscodeVideoIds(): string[] {
+    const rows = db
+      .prepare(
+        `
+          SELECT id
+          FROM videos
+          WHERE COALESCE(playback_status, 'direct') = 'needs_transcode'
+        `
+      )
+      .all() as VideoIdRow[];
+
+    return rows.map((row) => row.id);
+  }
+
   replaceFolderVideos(folderId: string, scannedVideos: PersistedVideoInput[]): number {
     this.replaceFolderVideosTransaction(folderId, scannedVideos, Math.floor(Date.now() / 1000));
     return scannedVideos.length;
+  }
+
+  repairLegacyDirectPlaybackCandidates(): string[] {
+    const rows = db
+      .prepare(
+        `
+          SELECT id
+          FROM videos
+          WHERE COALESCE(playback_status, 'direct') = 'direct'
+            AND (mime_type = 'video/mp4' OR extension IN ('.mp4', '.m4v'))
+            AND (
+              TRIM(COALESCE(video_codec, '')) = ''
+              OR LOWER(TRIM(video_codec)) <> 'h264'
+              OR (
+                TRIM(COALESCE(audio_codec, '')) <> ''
+                AND LOWER(TRIM(audio_codec)) <> 'aac'
+              )
+            )
+        `
+      )
+      .all() as VideoIdRow[];
+
+    if (rows.length === 0) {
+      return [];
+    }
+
+    const updateTransaction = db.transaction((videoIds: string[]) => {
+      const statement = db.prepare("UPDATE videos SET playback_path = NULL, playback_status = 'needs_transcode' WHERE id = ?");
+
+      for (const videoId of videoIds) {
+        statement.run(videoId);
+      }
+    });
+
+    const videoIds = rows.map((row) => row.id);
+    updateTransaction(videoIds);
+    return videoIds;
   }
 
   clearFolderVideos(folderId: string): void {

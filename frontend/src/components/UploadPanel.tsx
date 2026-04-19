@@ -8,7 +8,6 @@ const acceptedFormats = ["mp4", "mov", "mkv", "avi", "webm", "m4v", "3gp", "flv"
 type UploadedVideo = {
   id: string;
   sourceName: string;
-  streamUrl: string;
   title: string;
 };
 
@@ -21,7 +20,7 @@ type UploadResponse = {
   videos: UploadedVideo[];
 };
 
-export function UploadPage() {
+export function UploadPanel() {
   const navigate = useNavigate();
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -68,17 +67,14 @@ export function UploadPage() {
   }
 
   return (
-    <section className="panel-page">
-      <div className="section-header">
+    <div className="stack-list">
+      <form className="upload-panel form-stack" onSubmit={(event) => void handleSubmit(event)}>
         <div>
-          <p className="eyebrow">Upload Pipeline</p>
-          <h2>Drop videos into the same indexed library the feed already uses.</h2>
-          <p className="sheet-copy">Uploaded files land in the system-managed Uploads source, then immediately reindex into the feed.</p>
+          <p className="eyebrow">Upload</p>
+          <h3>Upload</h3>
+          <p className="sheet-copy">Files go into the system Uploads source and reindex into the feed.</p>
         </div>
-        <span className="pill">Step 3</span>
-      </div>
 
-      <form className="feature-card form-stack" onSubmit={(event) => void handleSubmit(event)}>
         <label className="field">
           Video files
           <input
@@ -98,7 +94,7 @@ export function UploadPage() {
           ))}
         </div>
 
-        <div className="upload-page__summary">
+        <div className="upload-page__summary upload-panel__actions">
           <p className="sheet-copy">
             {selectedFiles.length > 0 ? `${selectedFiles.length} files ready to upload.` : "Choose one or more supported video files."}
           </p>
@@ -108,9 +104,9 @@ export function UploadPage() {
         </div>
 
         {selectedFiles.length > 0 ? (
-          <div className="stack-list">
+          <div className="upload-panel__files">
             {selectedFiles.map((file) => (
-              <article key={`${file.name}-${file.size}-${file.lastModified}`} className="list-card">
+              <article key={`${file.name}-${file.size}-${file.lastModified}`} className="upload-panel__file">
                 <div>
                   <h3>{file.name}</h3>
                   <p className="list-card__path">{Math.max(1, Math.round(file.size / 1024 / 1024))} MB</p>
@@ -121,15 +117,15 @@ export function UploadPage() {
         ) : null}
 
         {error ? (
-          <article className="list-card">
+          <article className="mounts-page__notice">
             <p>{error}</p>
           </article>
         ) : null}
       </form>
 
       {result ? (
-        <div className="stack-list">
-          <article className="list-card">
+        <div className="upload-panel__results">
+          <article className="upload-panel__result">
             <div>
               <h3>{result.accepted} videos indexed</h3>
               <p className="list-card__path">
@@ -143,7 +139,7 @@ export function UploadPage() {
           </article>
 
           {result.videos.map((video) => (
-            <article key={video.id} className="list-card">
+            <article key={video.id} className="upload-panel__result">
               <div>
                 <h3>{video.title}</h3>
                 <p className="list-card__path">{video.sourceName}</p>
@@ -161,6 +157,6 @@ export function UploadPage() {
           ))}
         </div>
       ) : null}
-    </section>
+    </div>
   );
 }

@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 import { apiRequest } from "../api/client";
 import { useAuth } from "../hooks/useAuth";
+import { type PlaybackCompletionMode, useUiStore } from "../store/uiStore";
 
 type HealthData = {
   dbFile: string;
@@ -38,8 +39,18 @@ type JobSnapshot = {
   updatedAt: number;
 };
 
+const playbackCompletionOptions: Array<{ label: string; value: PlaybackCompletionMode }> = [
+  { label: "Stop", value: "stop" },
+  { label: "Play next", value: "next" },
+  { label: "Repeat current", value: "repeat" }
+];
+
 export function SettingsPage() {
   const { authEnabled, sessionExpiresAt } = useAuth();
+  const playbackCompletionMode = useUiStore((state) => state.playbackCompletionMode);
+  const setPlaybackCompletionMode = useUiStore((state) => state.setPlaybackCompletionMode);
+  const setSoundOnOpen = useUiStore((state) => state.setSoundOnOpen);
+  const soundOnOpen = useUiStore((state) => state.soundOnOpen);
   const [health, setHealth] = useState<HealthData | null>(null);
   const [jobs, setJobs] = useState<JobSnapshot[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -98,7 +109,74 @@ export function SettingsPage() {
   }, []);
 
   return (
-    <section className="sheet-page">
+    <section className="panel-page settings-page">
+      <div className="section-header">
+        <div>
+          <p className="eyebrow">Settings</p>
+          <h2>Settings</h2>
+          <p className="sheet-copy">Playback and background jobs.</p>
+        </div>
+      </div>
+
+      <article className="list-card settings-card">
+        <div>
+          <p className="eyebrow">Playback</p>
+          <h3>Default playback behavior</h3>
+          <p className="list-card__path">Control how the feed opens and what happens when a clip reaches the end.</p>
+        </div>
+        <div className="settings-controls">
+          <div className="settings-control">
+            <div className="settings-control__copy">
+              <p className="settings-control__label">Sound on open</p>
+              <p className="settings-control__help">
+                {soundOnOpen ? "New feed sessions start with audio enabled." : "New feed sessions start muted."}
+              </p>
+            </div>
+            <button
+              aria-checked={soundOnOpen}
+              className={soundOnOpen ? "settings-switch settings-switch--active" : "settings-switch"}
+              onClick={() => setSoundOnOpen(!soundOnOpen)}
+              role="switch"
+              type="button"
+            >
+              <span className="settings-switch__thumb" />
+            </button>
+          </div>
+
+          <label className="settings-control settings-control--stacked">
+            <div className="settings-control__copy">
+              <p className="settings-control__label">When playback finishes</p>
+              <p className="settings-control__help">Choose whether the player stops, advances, or loops the current clip.</p>
+            </div>
+            <span className="settings-select-wrap">
+              <select
+                className="settings-select"
+                onChange={(event) => setPlaybackCompletionMode(event.target.value as PlaybackCompletionMode)}
+                value={playbackCompletionMode}
+              >
+                {playbackCompletionOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <span className="settings-select__icon" aria-hidden="true">
+                <svg viewBox="0 0 20 20">
+                  <path
+                    d="M5.25 7.75 10 12.5l4.75-4.75"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1.8"
+                  />
+                </svg>
+              </span>
+            </span>
+          </label>
+        </div>
+      </article>
+
       <div className="stack-list">
         <article className="list-card">
           <div>

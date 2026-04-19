@@ -31,13 +31,21 @@ function normalizePlaybackStatus(playbackStatus: string | null | undefined, fall
     : fallback;
 }
 
-function buildFallbackPlaybackStatus(scannedVideo: ScannedVideo): PlaybackStatus {
-  return scannedVideo.mimeType === "video/mp4" ? "direct" : "needs_transcode";
+function buildFallbackPlaybackStatus(scannedVideo: ScannedVideo, probeAvailable: boolean): PlaybackStatus {
+  if (probeAvailable) {
+    return "needs_transcode";
+  }
+
+  return scannedVideo.mimeType === "video/mp4" || scannedVideo.extension === ".mp4" || scannedVideo.extension === ".m4v"
+    ? "direct"
+    : "needs_transcode";
 }
 
 class MediaProcessor {
   async processScannedVideo(scannedVideo: ScannedVideo): Promise<ProcessedVideo> {
     const existingVideo = videoIndexService.findVideoBySourcePath(scannedVideo.sourcePath);
+    const probeAvailable = await metadataExtractor.isAvailable();
+    const fallbackPlaybackStatus = buildFallbackPlaybackStatus(scannedVideo, probeAvailable);
     const isUnchangedSource =
       existingVideo?.sourceMtimeMs === scannedVideo.sourceMtimeMs && existingVideo?.sourceSize === scannedVideo.sourceSize;
     const hasReusableProcessingArtifacts = Boolean(
@@ -48,8 +56,13 @@ class MediaProcessor {
           existingVideo.thumbnailPath !== null ||
           existingVideo.thumbnailSmPath !== null)
     );
+    const canReuseExistingPlaybackDecision = !(
+      existingVideo?.playbackStatus === "direct" &&
+      fallbackPlaybackStatus !== "direct" &&
+      !existingVideo.videoCodec
+    );
 
-    if (isUnchangedSource && hasReusableProcessingArtifacts) {
+    if (isUnchangedSource && hasReusableProcessingArtifacts && canReuseExistingPlaybackDecision) {
       return {
         ...scannedVideo,
         audioCodec: existingVideo.audioCodec,
@@ -58,7 +71,7 @@ class MediaProcessor {
         fps: existingVideo.fps,
         height: existingVideo.height,
         playbackPath: existingVideo.playbackPath,
-        playbackStatus: normalizePlaybackStatus(existingVideo.playbackStatus, buildFallbackPlaybackStatus(scannedVideo)),
+        playbackStatus: normalizePlaybackStatus(existingVideo.playbackStatus, fallbackPlaybackStatus),
         thumbnailPath: existingVideo.thumbnailPath,
         thumbnailSmPath: existingVideo.thumbnailSmPath,
         videoCodec: existingVideo.videoCodec,
@@ -66,7 +79,7 @@ class MediaProcessor {
       };
     }
 
-    const metadata = await metadataExtractor.extract(scannedVideo.sourcePath);
+    const metadata = probeAvailable ? await metadataExtractor.extract(scannedVideo.sourcePath) : null;
     const videoId = buildVideoId(scannedVideo.sourcePath);
     const playbackStatus = metadata
       ? resolvePlaybackStatus({
@@ -75,7 +88,7 @@ class MediaProcessor {
           mimeType: scannedVideo.mimeType,
           videoCodec: metadata.videoCodec
         })
-      : buildFallbackPlaybackStatus(scannedVideo);
+      : fallbackPlaybackStatus;
     const thumbnails = await thumbnailService.generateThumbnails(videoId, scannedVideo.sourcePath, metadata?.durationSeconds ?? null);
 
     return {

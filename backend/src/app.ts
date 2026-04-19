@@ -12,6 +12,7 @@ import { authRouter } from "./routes/auth.js";
 import { foldersRouter } from "./routes/folders.js";
 import { healthRouter } from "./routes/health.js";
 import { jobsRouter } from "./routes/jobs.js";
+import { preferencesRouter } from "./routes/preferences.js";
 import { streamRouter } from "./routes/stream.js";
 import { uploadsRouter } from "./routes/uploads.js";
 import { videosRouter } from "./routes/videos.js";
@@ -45,6 +46,7 @@ export function createApp() {
   app.use("/api/folders", foldersRouter);
   app.use("/api/health", healthRouter);
   app.use("/api/jobs", jobsRouter);
+  app.use("/api/preferences", preferencesRouter);
   app.use("/api/uploads", uploadsRouter);
   app.use("/api/videos", videosRouter);
   app.use("/stream", streamRouter);

@@ -60,9 +60,10 @@ class PlaybackStateService {
 
   markPlay(videoId: string, positionSeconds: number): PlaybackState {
     const currentState = this.getState(videoId);
+    const normalizedPositionSeconds = positionSeconds > 0.5 ? positionSeconds : currentState.resumePositionSeconds;
     const nextState: PlaybackState = {
       playCount: currentState.playCount + 1,
-      resumePositionSeconds: positionSeconds,
+      resumePositionSeconds: normalizedPositionSeconds,
       lastPlayedAt: Math.floor(Date.now() / 1000)
     };
 

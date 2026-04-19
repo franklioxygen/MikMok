@@ -2,6 +2,7 @@ import { FormEvent, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { apiRequest } from "../api/client";
+import { UploadPanel } from "../components/UploadPanel";
 
 type Folder = {
   autoScan: boolean;
@@ -156,20 +157,19 @@ export function FolderBrowserPage() {
   }
 
   return (
-    <section className="sheet-page">
+    <section className="panel-page mounts-page">
       <div className="section-header">
         <div>
-          <p className="eyebrow">Mounted Sources</p>
-          <h2>Register folders, then scan them into the feed.</h2>
-          <p className="sheet-copy">Feed candidates now come from persisted mounted folders, not from raw env roots alone.</p>
+          <p className="eyebrow">Mounts</p>
+          <h2>Mounts</h2>
+          <p className="sheet-copy">Add a path, scan it, and browse its videos.</p>
         </div>
-        <span className="pill">Step 2</span>
       </div>
 
-      <form className="list-card folder-browser__create" onSubmit={(event) => void handleSubmit(event)}>
+      <form className="mounts-page__composer folder-browser__create" onSubmit={(event) => void handleSubmit(event)}>
         <div className="form-stack folder-browser__form">
           <label className="field">
-            Optional label
+            Label
             <input
               onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
               placeholder="Travel Shorts"
@@ -187,37 +187,39 @@ export function FolderBrowserPage() {
           </label>
         </div>
         <div className="folder-browser__actions">
-          <p className="sheet-copy">The path must live under an allowed mount root on the backend.</p>
+          <p className="plain-note">The path must live under an allowed backend mount root.</p>
           <button className="action-chip action-chip--primary" disabled={isSubmitting} type="submit">
             {isSubmitting ? "Mounting..." : "Add mount"}
           </button>
         </div>
       </form>
 
+      <UploadPanel />
+
       <div className="stack-list">
         {error ? (
-          <article className="list-card">
+          <article className="mounts-page__notice">
             <p>{error}</p>
           </article>
         ) : null}
         {feedback ? (
-          <article className="list-card">
+          <article className="mounts-page__notice">
             <p>{feedback}</p>
           </article>
         ) : null}
         {isLoading ? (
-          <article className="list-card">
+          <article className="mounts-page__notice">
             <p>Loading mounted folders...</p>
           </article>
         ) : null}
         {!isLoading && folders.length === 0 ? (
-          <article className="list-card">
+          <article className="mounts-page__notice">
             <p>No mounted folders yet. Add one above to populate the feed.</p>
           </article>
         ) : null}
         {folders.map((folder) => (
-          <article key={folder.id} className="list-card">
-            <div>
+          <article key={folder.id} className="mounts-page__item">
+            <div className="mounts-page__meta">
               <h3>{folder.name}</h3>
               <p className="list-card__path">{folder.mountPath}</p>
               <p className="list-card__path">

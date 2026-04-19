@@ -2,13 +2,13 @@ import { NavLink, useLocation } from "react-router-dom";
 
 import { useUiStore } from "../store/uiStore";
 
-function AppIcon({ name }: { name: "feed" | "folders" | "settings" | "upload" }) {
+function AppIcon({ name }: { name: "favorites" | "feed" | "folders" | "settings" }) {
   switch (name) {
     case "feed":
       return (
         <svg aria-hidden="true" className="bottom-nav__icon" viewBox="0 0 24 24">
           <path
-            d="M12 3 4.5 7v10L12 21l7.5-4V7L12 3Zm0 2.2 5.2 2.75L12 10.7 6.8 7.95 12 5.2Zm-6 4.28 5 2.66v6.12l-5-2.66V9.48Zm7 8.78v-6.12l5-2.66v6.12l-5 2.66Z"
+            d="m12 2.9 1.65 4.34 4.34 1.65-4.34 1.65L12 14.88l-1.65-4.34-4.34-1.65 4.34-1.65L12 2.9Zm6.2 9.45.8 2.12 2.12.8-2.12.8-.8 2.12-.8-2.12-2.12-.8 2.12-.8.8-2.12ZM7.05 14.9l1.05 2.8 2.8 1.05-2.8 1.05-1.05 2.8-1.05-2.8-2.8-1.05 2.8-1.05 1.05-2.8Z"
             fill="currentColor"
           />
         </svg>
@@ -22,11 +22,11 @@ function AppIcon({ name }: { name: "feed" | "folders" | "settings" | "upload" })
           />
         </svg>
       );
-    case "upload":
+    case "favorites":
       return (
         <svg aria-hidden="true" className="bottom-nav__icon" viewBox="0 0 24 24">
           <path
-            d="M11 4.5a1 1 0 0 1 2 0v8.09l2.8-2.8a1 1 0 1 1 1.4 1.42l-4.5 4.5a1 1 0 0 1-1.4 0l-4.5-4.5a1 1 0 1 1 1.4-1.42l2.8 2.8V4.5ZM5 18a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"
+            d="M12 20.7 4.93 13.9a4.93 4.93 0 0 1 6.97-6.97L12 7.03l.1-.1a4.93 4.93 0 1 1 6.97 6.97L12 20.7Z"
             fill="currentColor"
           />
         </svg>
@@ -45,16 +45,17 @@ function AppIcon({ name }: { name: "feed" | "folders" | "settings" | "upload" })
 
 const items = [
   { icon: "feed" as const, label: "For You", to: "/feed" },
+  { icon: "favorites" as const, label: "Favorites", to: "/favorites" },
   { icon: "folders" as const, label: "Folders", to: "/folders" },
-  { icon: "upload" as const, label: "Upload", to: "/upload" },
   { icon: "settings" as const, label: "Settings", to: "/settings" }
 ];
 
 export function BottomNav() {
   const location = useLocation();
   const feedControlsVisible = useUiStore((state) => state.feedControlsVisible);
+  const normalizedPathname = location.pathname.replace(/\/+$/, "") || "/";
   const className =
-    location.pathname === "/feed" && !feedControlsVisible ? "bottom-nav bottom-nav--hidden" : "bottom-nav";
+    normalizedPathname === "/feed" && !feedControlsVisible ? "bottom-nav bottom-nav--hidden" : "bottom-nav";
 
   return (
     <nav className={className} aria-label="Primary navigation">

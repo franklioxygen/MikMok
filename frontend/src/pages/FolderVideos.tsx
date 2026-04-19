@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 
 type FolderVideo = {
   durationSeconds: number | null;
@@ -27,6 +27,7 @@ type FolderVideosResponseMeta = {
 
 export function FolderVideosPage() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const [videos, setVideos] = useState<FolderVideo[]>([]);
   const [meta, setMeta] = useState<FolderVideosResponseMeta | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,15 +75,15 @@ export function FolderVideosPage() {
   }, [id]);
 
   return (
-    <section className="sheet-page">
+    <section className="panel-page folder-videos-page">
       <div className="section-header">
         <div>
-          <p className="eyebrow">Folder Videos</p>
+          <p className="eyebrow">Folder</p>
           <h2>{meta?.folderName ?? "Loading folder..."}</h2>
-          <p className="sheet-copy">This view uses the same mounted files as the main feed, but groups them by source folder.</p>
+          <p className="sheet-copy">Videos in this mount.</p>
         </div>
         <Link className="action-chip" to="/folders">
-          Back to folders
+          Back
         </Link>
       </div>
 
@@ -108,13 +109,17 @@ export function FolderVideosPage() {
             <div className="folder-video-page__meta">
               <span className="pill">{video.playCount} plays</span>
               <span className="pill">resume {Math.round(video.resumePositionSeconds)}s</span>
-              <a
+              <button
                 aria-disabled={video.playbackStatus !== "direct" && video.playbackStatus !== "ready"}
                 className="action-chip action-chip--primary"
-                href={video.playbackStatus === "direct" || video.playbackStatus === "ready" ? video.streamUrl : undefined}
+                disabled={video.playbackStatus !== "direct" && video.playbackStatus !== "ready"}
+                onClick={() => {
+                  navigate(`/feed?video=${encodeURIComponent(video.id)}`);
+                }}
+                type="button"
               >
-                Open stream
-              </a>
+                Play
+              </button>
             </div>
           </article>
         ))}
