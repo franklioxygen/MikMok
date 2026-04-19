@@ -2,6 +2,23 @@
 
 > 单用户私有短视频平台，移动端优先，PWA 形态，强调稳定可实施的 MVP。
 
+## 当前原型状态（2026-04-18）
+
+以下内容描述的是当前已经落地的原型，而不是最终完整 MVP：
+
+- 首页打开后直接进入推荐视频播放态，不先展示管理面板或登录页
+- 所有主操作入口都收敛到底部可触达区域，交互参考 TikTok 的阅读顺序
+- 当前原型已支持通过上滑 / 下滑、滚轮、方向键切换真实视频
+- 前端当前临时关闭登录拦截，优先验证“打开即播”的核心体验
+- 后端已实现挂载目录持久化注册、一次性导入允许根、`GET/POST/DELETE /api/folders`、`POST /api/folders/:id/scan`
+- 后端已实现 `POST /api/uploads`，上传文件会进入系统内置的 `Uploads` 来源并写入统一视频索引
+- 文件夹扫描结果当前会持久化到 SQLite `videos` 表，Feed 与流播放只读取这份索引快照
+- `GET /api/videos/feed`、`GET /stream/:id` 已接通真实文件，但不再为每次请求现场扫盘
+- 后端已实现视频详情、播放开始与播放进度的原型接口，播放状态当前已持久化到 SQLite
+- `/folders/:id/videos` 已实现，文件夹页可以浏览该挂载源下的真实视频列表
+- 本地开发默认测试挂载目录为 `/Users/franklioxygen/Projects/test-shorts`
+- SQLite、上传流水线、转码队列、正式鉴权恢复后再按后续阶段接入
+
 ---
 
 ## 目录
@@ -44,6 +61,7 @@ MVP 只解决以下问题：
 - 为视频提取元数据、生成缩略图、必要时转码
 - 提供移动端可用的 Feed、文件夹浏览、标签过滤
 - 提供单密码登录、会话管理、基础运维与备份能力
+- 原型阶段允许暂时关闭登录门槛，以优先验证“打开首页立即播放”的体验
 
 ### 1.3 明确不做
 
@@ -55,7 +73,7 @@ MVP 只解决以下问题：
 
 ### 1.4 成功标准
 
-- 局域网内首屏进入 Feed 后 2 秒内看到首个视频封面
+- 局域网内打开首页后 2 秒内看到并开始播放首个推荐视频
 - 已可播放视频在滑动切换后 500ms 内开始播放
 - 扫描和转码任务在进程重启后可恢复
 - 所有文件访问都受允许目录约束
@@ -104,6 +122,15 @@ MVP 不做 HLS，自适应码率也不做。统一采用以下规则：
 - iOS Safari、Chrome Mobile、PWA 对媒体格式支持不一致
 - 直接把“浏览器能播什么”交给用户文件原格式，会导致体验不可预测
 - 单用户场景优先稳定性，先不引入 HLS 清单、分片、缓存失效复杂度
+
+#### 首页体验
+
+首页不是“控制台”或“管理入口”，而应该直接进入正在播放的推荐视频：
+
+- 默认路由打开后立即进入 Feed
+- 第一屏优先展示当前推荐视频本身，而不是文件夹、设置或统计信息
+- 视频元信息、切换操作、全局主导航统一沉到底部可触达区域
+- 文件夹、上传、设置这些页面属于次级面板，不抢占首页的第一视觉层级
 
 #### 鉴权策略
 
@@ -596,11 +623,8 @@ scan worker:
 
 ```text
 浏览器上传 -> /app/uploads/tmp
-  -> HTTP 返回 uploadBatchId + accepted files
-  -> 后台入队 upload_finalize job
-  -> 原子移动到 /app/uploads/videos
-  -> ffprobe / thumbnail / playback resolve
-  -> 必要时入队 transcode
+  -> 原子移动到 /app/uploads/videos/<upload-id>/<original-name>
+  -> 立即重扫系统 Uploads 来源
   -> 写 videos 表
 ```
 
@@ -679,6 +703,8 @@ transcode job
 
 ## 8. Feed 设计
 
+Feed 是整个产品的默认落点。用户打开首页时，应立即看到一条已经在播放中的推荐视频，而不是先看到登录页、空白容器或管理总览。
+
 ### 8.1 Feed 模式
 
 | 模式 | 说明 |
@@ -692,6 +718,14 @@ transcode job
 - `folderId`
 - `tag`
 - `likedOnly`
+
+当前原型的推荐策略先采用一个更直接的子集：
+
+- 推荐列表来自允许挂载根目录下的真实视频文件
+- 首条推荐默认取最近更新的视频
+- 切换逻辑先由前端本地索引驱动
+- 当前已支持真实视频的垂直切换手势，下一步再补预加载和三卡结构
+- 后续再升级为完整的服务端 Feed 会话和稳定分页
 
 ### 8.2 为什么不用 `last_video_id` 做随机游标
 
@@ -932,6 +966,8 @@ Request:
 
 #### `POST /api/folders`
 
+当前原型已实现。
+
 Request:
 
 ```json
@@ -950,6 +986,7 @@ Request:
 - 真实路径可读
 - 不能与现有挂载路径互为父子目录
 - 必须位于 `ALLOWED_MOUNT_ROOTS` 允许的根目录之下
+- 数据库首次启动时，可把现有允许根目录一次性导入为默认挂载源
 
 #### `PATCH /api/folders/:id`
 
@@ -972,9 +1009,12 @@ Request:
 语义：
 
 - 移除挂载配置
-- 该目录下已发现的视频保留记录，但统一 `hidden=1`
+- 当前原型不删除磁盘文件
+- 删除最后一个挂载后不会再次自动从环境变量补回
 
 #### `POST /api/folders/:id/scan`
+
+当前原型已实现，并同步更新 `scan_status`、`last_scanned_at` 与当前视频数。
 
 Response:
 
@@ -999,6 +1039,8 @@ Query:
 
 #### `POST /api/uploads`
 
+当前原型已实现。
+
 Request:
 
 - `multipart/form-data`
@@ -1011,8 +1053,9 @@ Response:
   "success": true,
   "data": {
     "uploadBatchId": "upl_123",
-    "jobId": "job_upload_finalize_123",
-    "accepted": 3
+    "accepted": 1,
+    "rejected": [],
+    "folderName": "Uploads"
   }
 }
 ```
@@ -1020,7 +1063,7 @@ Response:
 说明：
 
 - 网络上传进度不走 SSE
-- `jobId` 仅表示上传完成后的服务端处理进度
+- 上传完成后会立即重扫系统内置的 `Uploads` 来源
 
 ### 9.6 任务
 
@@ -1125,7 +1168,7 @@ Request:
 /folders/:id  -> 文件夹视频列表
 /upload       -> 上传页
 /settings     -> 设置页
-/login        -> 登录页
+/login        -> 登录页（目标态保留；当前原型默认不启用）
 ```
 
 ### 10.2 状态划分
@@ -1151,14 +1194,16 @@ Request:
 
 ```text
 FeedPage
-  |- FeedStack
+  |- FullscreenVideoStage
   |   |- VideoPlayer (current)
-  |   |- VideoPlayer (next preview)
-  |   `- placeholder poster
-  |- VideoOverlay
-  |- ActionBar
+  |   |- preload hook (next)
+  |   `- gesture handler (vertical swipe)
+  |- BottomMetaPanel
+  |- BottomActionRow
   `- BottomNav
 ```
+
+当前原型先以单个真实 `video` 元素直连 `/stream/:id`，下一步再补上一条 / 当前 / 下一条三卡预载结构。
 
 ### 10.4 播放与预加载
 

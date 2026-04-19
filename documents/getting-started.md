@@ -49,7 +49,8 @@ docker compose up -d
 
 - `http://localhost:5552`
 
-首次密码取自 `MIKMOK_PASSWORD`。
+当前原型会直接进入首页播放态，不要求先登录。
+完整 MVP 恢复鉴权后，首次密码取自 `MIKMOK_PASSWORD`。
 
 ---
 
@@ -100,8 +101,10 @@ npm install
 ```bash
 # backend/.env
 PORT=5552
+HOST=0.0.0.0
 MIKMOK_PASSWORD=changeme
-ALLOWED_MOUNT_ROOTS=/mounts
+CORS_ORIGIN=http://localhost:5173
+ALLOWED_MOUNT_ROOTS=/Users/franklioxygen/Projects/test-shorts,/mounts
 SESSION_TTL_DAYS=7
 MAX_UPLOAD_SIZE_MB=500
 TRANSCODE_ENABLED=1
@@ -115,6 +118,7 @@ SCAN_SCHEDULER_INTERVAL_SECONDS=60
 ```bash
 # frontend/.env
 VITE_API_URL=/api
+VITE_BACKEND_URL=http://127.0.0.1:5552
 ```
 
 ### 启动开发服务器
@@ -128,15 +132,32 @@ npm run dev
 - 后端：`http://localhost:5552`
 - 前端：`http://localhost:5173`
 
+如果你要从局域网内其他设备访问：
+
+- 后端默认监听 `0.0.0.0`
+- 前端 Vite dev server 也监听 `0.0.0.0`
+- 打开前端输出的 `Network` 地址即可
+
+当前本地开发默认测试挂载目录：
+
+- `/Users/franklioxygen/Projects/test-shorts`
+
 ---
 
 ## 添加挂载目录
 
-登录后进入：
+当前原型已经接回挂载管理：
 
-- 设置
+- 服务端会在首次启动时，把存在的 `ALLOWED_MOUNT_ROOTS` 目录一次性导入为默认挂载源
+- 后续新增目录应通过前端“Folders”页面或 `POST /api/folders` 显式注册
+- `GET /api/videos/feed` 只会从 SQLite 中已注册的挂载目录读取视频
+- 每次扫描都会把结果写入 SQLite `videos` 表，之后首页和流播放都读这份快照
+
+当前管理流程：
+
 - 文件夹管理
 - 添加路径
+- 立即扫描或移除
 
 Docker 场景要填写容器内路径，例如：
 
@@ -152,6 +173,8 @@ Docker 场景要填写容器内路径，例如：
 - 路径不可读
 - 路径不在允许根目录下
 - 路径与已有挂载目录互为父子目录
+
+如果你删除了最后一个挂载目录，它不会再自动从环境变量恢复；需要手动重新添加。
 
 ---
 
@@ -178,9 +201,9 @@ Docker 场景要填写容器内路径，例如：
 
 注意：
 
-- 并不是所有输入格式都能直接播放
-- 非 `MP4 + H.264 + AAC` 的视频会进入后台转码
-- Feed 默认只显示已可播放的视频
+- 当前原型上传成功后，会立即重扫系统内置的 `Uploads` 来源并刷新 feed
+- 你可以在 `Folders -> Uploads` 里看到刚上传的视频
+- 当前原型还没接入缩略图和转码队列，先按源文件直接播放验证链路
 
 ---
 
@@ -206,11 +229,11 @@ MVP 只缓存应用壳，不缓存视频文件。
 
 可能原因：
 
-- 仍在提取元数据
-- 仍在生成缩略图
-- 正在后台转码
+- 上传请求本身失败
+- `Uploads` 来源还没完成本次重扫
+- 上传文件类型不在当前允许列表里
 
-先查看任务状态，再等待 `playback_status` 变为 `direct` 或 `ready`。
+先查看上传接口响应，再打开 `Folders -> Uploads` 确认该文件是否已经入库。
 
 ### 视频无法播放
 

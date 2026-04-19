@@ -1,6 +1,23 @@
 # MikMok — API 接口参考
 
-所有接口默认以 `/api` 为前缀，除 `GET /stream/:id` 外都走 API 域。除登录、健康检查外，其余接口都要求已登录。
+所有接口默认以 `/api` 为前缀，除 `GET /stream/:id` 外都走 API 域。
+
+当前原型（2026-04-18）已实现的稳定子集：
+
+- `GET /api/health`
+- `GET /api/videos/feed`
+- `GET /api/videos/:id`
+- `POST /api/videos/:id/play`
+- `POST /api/videos/:id/progress`
+- `GET /api/folders`
+- `POST /api/folders`
+- `DELETE /api/folders/:id`
+- `POST /api/folders/:id/scan`
+- `GET /api/folders/:id/videos`
+- `POST /api/uploads`
+- `GET /stream/:id`
+
+当前前端为验证“打开即播”的体验，暂时不启用登录拦截；`auth` 接口仍保留为后续恢复正式鉴权的接入点。
 
 写接口要求：
 
@@ -82,19 +99,28 @@ Response:
 
 ### `GET /api/videos/feed`
 
-获取 Feed。随机模式通过服务端 `sessionId` 保持顺序稳定。
+获取 Feed。
+
+当前原型行为：
+
+- 从 SQLite 中已注册的挂载目录生成列表
+- 文件夹扫描结果会持久化到 SQLite `videos` 表
+- 首次启动时会把存在的 `ALLOWED_MOUNT_ROOTS` 目录一次性导入为默认挂载源
+- 按文件更新时间倒序返回
+- 不需要 `sessionId`、`cursor`
+- 首页默认使用第一条作为“正在播放”的推荐视频
 
 Query:
 
 | 参数 | 类型 | 默认 | 说明 |
 |------|------|------|------|
-| `mode` | string | `random` | `random` / `latest` / `by_folder` |
-| `sessionId` | string | - | 首次不传，翻页时传回 |
-| `cursor` | string | - | 不透明游标 |
-| `limit` | number | `10` | 每页条数，最大 20 |
-| `folderId` | string | - | 限定文件夹 |
-| `tag` | string | - | 按标签过滤 |
-| `likedOnly` | boolean | `false` | 仅喜欢的视频 |
+| `mode` | string | - | 预留；当前原型忽略 |
+| `sessionId` | string | - | 预留；当前原型忽略 |
+| `cursor` | string | - | 预留；当前原型忽略 |
+| `limit` | number | - | 预留；当前原型忽略 |
+| `folderId` | string | - | 预留；当前原型忽略 |
+| `tag` | string | - | 预留；当前原型忽略 |
+| `likedOnly` | boolean | - | 预留；当前原型忽略 |
 
 Response:
 
@@ -103,41 +129,30 @@ Response:
   "success": true,
   "data": [
     {
-      "id": "vid_123",
-      "title": "Vacation Clip",
-      "durationSeconds": 31.5,
-      "width": 1080,
-      "height": 1920,
-      "thumbnailSmUrl": "/api/videos/vid_123/thumbnail-sm",
-      "streamUrl": "/stream/vid_123",
-      "folderId": "fld_1",
-      "tags": ["travel", "beach"],
-      "liked": false,
-      "resumePositionSeconds": 0
+      "id": "ae9623fdce783a64a347e6bb0a1063b80dec0789",
+      "title": "This.900mm.Lens.Is.WEIRD Tom.Calton 2023",
+      "sourceName": "This.900mm.Lens.Is.WEIRD-Tom.Calton-2023.mp4",
+      "folderName": "test-shorts",
+      "streamUrl": "/stream/ae9623fdce783a64a347e6bb0a1063b80dec0789",
+      "mimeType": "video/mp4",
+      "sourceSize": 15759651,
+      "updatedAt": 1776554909
     }
   ],
   "meta": {
-    "sessionId": "feed_sess_abc",
-    "nextCursor": "eyJvZmZzZXQiOjEwfQ==",
-    "hasMore": true
+    "hasMore": false,
+    "total": 3
   }
 }
 ```
 
-错误码：
-
-- `INVALID_FEED_MODE`
-- `SESSION_EXPIRED`
-- `INVALID_CURSOR`
-
-前端处理建议：
-
-- 收到 `SESSION_EXPIRED` 或 `INVALID_CURSOR` 后，清空本地 `sessionId` 和 `cursor`
-- 保留当前筛选条件，重新请求第一页
+后续完整 MVP 仍会恢复 `sessionId + cursor` 的 Feed 会话模型。
 
 ### `GET /api/videos/:id`
 
 获取单个视频详情。
+
+当前原型已实现。
 
 Response:
 
@@ -145,28 +160,19 @@ Response:
 {
   "success": true,
   "data": {
-    "id": "vid_123",
-    "title": "Vacation Clip",
-    "description": null,
-    "durationSeconds": 31.5,
-    "width": 1080,
-    "height": 1920,
-    "container": "mp4",
-    "videoCodec": "h264",
-    "audioCodec": "aac",
+    "id": "ae9623fdce783a64a347e6bb0a1063b80dec0789",
+    "title": "This.900mm.Lens.Is.WEIRD Tom.Calton 2023",
+    "sourceName": "This.900mm.Lens.Is.WEIRD-Tom.Calton-2023.mp4",
+    "folderName": "test-shorts",
+    "folderPath": "/Users/franklioxygen/Projects/test-shorts",
+    "streamUrl": "/stream/ae9623fdce783a64a347e6bb0a1063b80dec0789",
+    "mimeType": "video/mp4",
+    "sourceSize": 15759651,
     "playbackStatus": "direct",
-    "thumbnailUrl": "/api/videos/vid_123/thumbnail",
-    "thumbnailSmUrl": "/api/videos/vid_123/thumbnail-sm",
-    "streamUrl": "/stream/vid_123",
-    "sourceType": "mount",
-    "folderId": "fld_1",
-    "folderName": "Travel Shorts",
-    "tags": ["travel", "beach"],
-    "playCount": 12,
-    "resumePositionSeconds": 8.2,
-    "liked": true,
-    "hidden": false,
-    "createdAt": 1713400000
+    "playCount": 1,
+    "resumePositionSeconds": 33,
+    "lastPlayedAt": 1776556213,
+    "updatedAt": 1776554909
   }
 }
 ```
@@ -174,6 +180,8 @@ Response:
 ### `PATCH /api/videos/:id`
 
 更新视频元数据。
+
+状态：设计中，当前原型未实现。
 
 Request:
 
@@ -190,9 +198,13 @@ Request:
 
 软删除视频，不删除磁盘文件。
 
+状态：设计中，当前原型未实现。
+
 ### `POST /api/videos/:id/play`
 
 记录一次播放开始。
+
+当前原型已实现。
 
 Request:
 
@@ -200,9 +212,25 @@ Request:
 { "positionSeconds": 0 }
 ```
 
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "ae9623fdce783a64a347e6bb0a1063b80dec0789",
+    "lastPlayedAt": 1776556213,
+    "playCount": 1,
+    "resumePositionSeconds": 12
+  }
+}
+```
+
 ### `POST /api/videos/:id/progress`
 
 上报播放进度。
+
+当前原型已实现。
 
 Request:
 
@@ -213,13 +241,31 @@ Request:
 }
 ```
 
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "ae9623fdce783a64a347e6bb0a1063b80dec0789",
+    "lastPlayedAt": 1776556213,
+    "playCount": 1,
+    "resumePositionSeconds": 33
+  }
+}
+```
+
 ### `GET /api/videos/:id/thumbnail`
 
 返回全尺寸缩略图。
 
+状态：设计中，当前原型未实现。
+
 ### `GET /api/videos/:id/thumbnail-sm`
 
 返回小尺寸缩略图。
+
+状态：设计中，当前原型未实现。
 
 ---
 
@@ -244,11 +290,11 @@ Content-Range: bytes 0-1048576/12345678
 Accept-Ranges: bytes
 ```
 
+当前原型会先从 SQLite `videos` 表解析 `videoId`，再从对应源文件流式输出。
+
 错误码：
 
 - `VIDEO_NOT_FOUND`
-- `VIDEO_NOT_PLAYABLE`
-- `FILE_MISSING`
 - `RANGE_NOT_SATISFIABLE`
 
 ---
@@ -266,16 +312,17 @@ Response:
   "success": true,
   "data": [
     {
-      "id": "fld_1",
-      "name": "Travel Shorts",
-      "mountPath": "/mounts/travel-shorts",
+      "id": "f11fed3869384089b3ee110eccef83e3364322ab",
+      "name": "test-shorts",
+      "mountPath": "/Users/franklioxygen/Projects/test-shorts",
       "isActive": true,
-      "autoScan": true,
-      "scanIntervalMinutes": 60,
-      "maxDepth": 6,
-      "scanStatus": "done",
-      "lastScannedAt": 1713456789,
-      "videoCount": 42
+      "isSystem": false,
+      "autoScan": false,
+      "scanIntervalMinutes": null,
+      "maxDepth": null,
+      "scanStatus": "ready",
+      "lastScannedAt": null,
+      "videoCount": 3
     }
   ]
 }
@@ -284,6 +331,8 @@ Response:
 ### `POST /api/folders`
 
 添加挂载路径。
+
+当前原型已实现。
 
 Request:
 
@@ -308,10 +357,13 @@ Request:
 说明：
 
 - `mountPath` 必须位于服务端配置的 `ALLOWED_MOUNT_ROOTS` 之下，默认是 `/mounts`
+- 如果数据库里还没有任何挂载记录，服务端会在首次启动时把现有允许根目录一次性导入为挂载源
 
 ### `PATCH /api/folders/:id`
 
 更新挂载目录配置。
+
+状态：设计中，当前原型未实现。
 
 Request:
 
@@ -333,11 +385,20 @@ Request:
 
 ### `DELETE /api/folders/:id`
 
-移除挂载路径，不删除外部文件。该目录下视频会被标记为隐藏。
+移除挂载路径，不删除外部文件。
+
+当前原型已实现。
+
+说明：
+
+- 当前原型删除的是挂载配置本身，不删除磁盘文件
+- 删除最后一个挂载后，不会再次自动从环境变量补回；需要显式重新注册
 
 ### `POST /api/folders/:id/scan`
 
 触发立即扫描。
+
+当前原型已实现。
 
 Response:
 
@@ -345,22 +406,60 @@ Response:
 {
   "success": true,
   "data": {
-    "jobId": "job_scan_123"
+    "id": "f11fed3869384089b3ee110eccef83e3364322ab",
+    "name": "test-shorts",
+    "mountPath": "/Users/franklioxygen/Projects/test-shorts",
+    "scanStatus": "ready",
+    "lastScannedAt": 1776557090,
+    "videoCount": 3
   }
 }
 ```
+
+说明：
+
+- 该接口会刷新该文件夹在 SQLite `videos` 表中的快照
 
 ### `GET /api/folders/:id/videos`
 
 列出某文件夹的视频。
 
+当前原型已实现。
+
 Query:
 
 | 参数 | 类型 | 默认 | 说明 |
 |------|------|------|------|
-| `page` | number | `1` | 页码 |
-| `limit` | number | `20` | 每页条数 |
-| `sort` | string | `created_at` | `created_at` / `title` / `duration` |
+| `page` | number | - | 预留；当前原型忽略 |
+| `limit` | number | - | 预留；当前原型忽略 |
+| `sort` | string | - | 预留；当前原型忽略 |
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "ae9623fdce783a64a347e6bb0a1063b80dec0789",
+      "folderId": "f11fed3869384089b3ee110eccef83e3364322ab",
+      "folderName": "test-shorts",
+      "title": "This.900mm.Lens.Is.WEIRD Tom.Calton 2023",
+      "sourceName": "This.900mm.Lens.Is.WEIRD-Tom.Calton-2023.mp4",
+      "streamUrl": "/stream/ae9623fdce783a64a347e6bb0a1063b80dec0789",
+      "mimeType": "video/mp4",
+      "sourceSize": 15759651,
+      "updatedAt": 1776554909,
+      "playCount": 1,
+      "resumePositionSeconds": 52
+    }
+  ],
+  "meta": {
+    "folderName": "test-shorts",
+    "total": 3
+  }
+}
+```
 
 ---
 
@@ -369,6 +468,8 @@ Query:
 ### `POST /api/uploads`
 
 上传 1 个或多个视频文件。
+
+当前原型已实现。
 
 Request:
 
@@ -382,22 +483,35 @@ Response:
   "success": true,
   "data": {
     "uploadBatchId": "upl_123",
-    "jobId": "job_upload_finalize_123",
-    "accepted": 3
+    "accepted": 1,
+    "rejected": [],
+    "folderId": "a390b29c0f39b16791ad35b26f6cd4eb675eb2b5",
+    "folderName": "Uploads",
+    "videos": [
+      {
+        "id": "ba1343eb71133514a5e28bbeff2b17fcae72d6f2",
+        "title": "UMP45 FrenchGunGuy 2024",
+        "sourceName": "UMP45-FrenchGunGuy-2024.mp4",
+        "streamUrl": "/stream/ba1343eb71133514a5e28bbeff2b17fcae72d6f2"
+      }
+    ]
   }
 }
 ```
 
 说明：
 
+- 上传文件会写入系统内置的 `Uploads` 来源目录
+- 上传成功后，服务端会立即重扫该目录并刷新 SQLite `videos` 索引
 - 浏览器网络上传进度由前端本地上报
-- `jobId` 用于查询服务端后处理状态
 
 错误码：
 
+- `NO_FILES_UPLOADED`
 - `FILE_TYPE_NOT_ALLOWED`
 - `FILE_TOO_LARGE`
 - `UPLOAD_WRITE_FAILED`
+- `FOLDER_PROTECTED`
 
 ---
 

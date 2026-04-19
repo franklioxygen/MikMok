@@ -1,0 +1,24 @@
+# Single-image deployment for MikMok
+# Usage: docker compose -f stacks/docker-compose.yml up -d
+
+services:
+  mikmok:
+    image: ${MIKMOK_IMAGE:-ghcr.io/franklioxygen/mikmok:latest}
+    pull_policy: always
+    container_name: mikmok
+    ports:
+      - "${MIKMOK_PORT:-5552}:5552"
+    volumes:
+      - ${MIKMOK_DATA_DIR:-../data}:/app/backend/data
+      - ${MIKMOK_UPLOADS_DIR:-../uploads}:/app/backend/uploads
+      - ${MIKMOK_MOUNTS_DIR:-../mounts}:/mounts:ro
+    environment:
+      - HOST=0.0.0.0
+      - PORT=5552
+      - CORS_ORIGIN=${MIKMOK_CORS_ORIGIN:-http://localhost:5552}
+      - MIKMOK_PASSWORD=${MIKMOK_PASSWORD:-changeme}
+      - ALLOWED_MOUNT_ROOTS=/mounts
+      - SESSION_TTL_DAYS=${SESSION_TTL_DAYS:-7}
+      - MAX_UPLOAD_SIZE_MB=${MAX_UPLOAD_SIZE_MB:-500}
+      - TRANSCODE_ENABLED=${TRANSCODE_ENABLED:-1}
+    restart: unless-stopped

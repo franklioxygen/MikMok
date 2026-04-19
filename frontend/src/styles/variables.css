@@ -1,0 +1,17 @@
+:root {
+  --bg-base: #0d1418;
+  --bg-panel: rgba(13, 20, 24, 0.72);
+  --bg-soft: rgba(240, 238, 231, 0.12);
+  --line-soft: rgba(255, 255, 255, 0.12);
+  --text-main: #f7f3ec;
+  --text-muted: #b6c3c8;
+  --accent-amber: #f1b868;
+  --accent-coral: #ef7d6b;
+  --accent-mint: #82d8c4;
+  --shadow-lg: 0 30px 70px rgba(0, 0, 0, 0.35);
+  --radius-lg: 28px;
+  --radius-md: 20px;
+  --radius-sm: 14px;
+  --font-display: "Avenir Next", "SF Pro Display", "Helvetica Neue", sans-serif;
+  --font-body: "IBM Plex Sans", "Avenir Next", "Segoe UI", sans-serif;
+}
