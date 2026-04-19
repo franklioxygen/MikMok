@@ -2,31 +2,21 @@
 
 所有接口默认以 `/api` 为前缀，除 `GET /stream/:id` 外都走 API 域。
 
-当前原型（2026-04-18）已实现的稳定子集：
+本文档分两部分：
 
-- `GET /api/health`
-- `GET /api/videos/feed`
-- `GET /api/videos/:id`
-- `POST /api/videos/:id/play`
-- `POST /api/videos/:id/progress`
-- `GET /api/folders`
-- `POST /api/folders`
-- `DELETE /api/folders/:id`
-- `POST /api/folders/:id/scan`
-- `GET /api/folders/:id/videos`
-- `POST /api/uploads`
-- `GET /stream/:id`
+- 当前已经实现并可依赖的接口
+- 当前尚未实现、但已经确定的补齐设计
 
-当前前端为验证“打开即播”的体验，暂时不启用登录拦截；`auth` 接口仍保留为后续恢复正式鉴权的接入点。
+## 1. 当前原型约束
 
-写接口要求：
+截至 `2026-04-18`：
 
-- 认证 Cookie：`mikmok_session`
-- CSRF Header：`X-CSRF-Token`
+- 首页不要求登录
+- 后端仍保留 `/api/auth/*`
+- 当前写接口还没有统一接回认证中间件和 CSRF 校验
+- 当前媒体链路已包含元数据提取、缩略图生成和按需转码
 
----
-
-## 通用响应
+## 2. 通用响应
 
 ### 成功
 
@@ -47,18 +37,45 @@
 }
 ```
 
----
+## 3. 当前已实现接口
 
-## 认证
+### `GET /api/health`
+
+返回当前服务状态。
+
+Response:
+
+```json
+{
+  "success": true,
+  "data": {
+    "service": "mikmok-api",
+    "status": "ok",
+    "environment": "production",
+    "timestamp": 1776561535,
+    "transcodeEnabled": true,
+    "ffmpegAvailable": true,
+    "ffprobeAvailable": true,
+    "jobs": {
+      "queued": 0,
+      "running": 0,
+      "succeeded": 12,
+      "failed": 1,
+      "total": 13
+    },
+    "dbFile": "/app/backend/data/mikmok.db"
+  }
+}
+```
 
 ### `POST /api/auth/login`
 
-登录并创建会话。
+当前仍可用，但前端默认不再强制登录。
 
 Request:
 
 ```json
-{ "password": "your_password" }
+{ "password": "changeme" }
 ```
 
 Response:
@@ -72,55 +89,31 @@ Response:
   }
 }
 ```
+
+说明：
+
+- 当前密码直接来自 `MIKMOK_PASSWORD`
+- 当前会话存在内存里，服务重启即失效
 
 ### `POST /api/auth/logout`
 
-退出当前会话并清除 Cookie。
+清除当前会话 Cookie。
 
 ### `GET /api/auth/status`
 
-检查当前登录状态。
-
-Response:
-
-```json
-{
-  "success": true,
-  "data": {
-    "authenticated": true,
-    "sessionExpiresAt": 1713456789
-  }
-}
-```
-
----
-
-## Feed 与视频
+返回当前登录状态。
 
 ### `GET /api/videos/feed`
 
-获取 Feed。
+返回首页 Feed 列表。
 
-当前原型行为：
+当前行为：
 
-- 从 SQLite 中已注册的挂载目录生成列表
-- 文件夹扫描结果会持久化到 SQLite `videos` 表
-- 首次启动时会把存在的 `ALLOWED_MOUNT_ROOTS` 目录一次性导入为默认挂载源
-- 按文件更新时间倒序返回
-- 不需要 `sessionId`、`cursor`
-- 首页默认使用第一条作为“正在播放”的推荐视频
-
-Query:
-
-| 参数 | 类型 | 默认 | 说明 |
-|------|------|------|------|
-| `mode` | string | - | 预留；当前原型忽略 |
-| `sessionId` | string | - | 预留；当前原型忽略 |
-| `cursor` | string | - | 预留；当前原型忽略 |
-| `limit` | number | - | 预留；当前原型忽略 |
-| `folderId` | string | - | 预留；当前原型忽略 |
-| `tag` | string | - | 预留；当前原型忽略 |
-| `likedOnly` | boolean | - | 预留；当前原型忽略 |
+- 从 SQLite `videos` 索引表读取
+- 按 `source_mtime_ms` 倒序返回
+- 不使用 `sessionId` 或 `cursor`
+- 不做标签筛选或喜欢筛选
+- 仅返回 `playbackStatus in ('direct', 'ready')` 的视频
 
 Response:
 
@@ -129,30 +122,32 @@ Response:
   "success": true,
   "data": [
     {
-      "id": "ae9623fdce783a64a347e6bb0a1063b80dec0789",
-      "title": "This.900mm.Lens.Is.WEIRD Tom.Calton 2023",
-      "sourceName": "This.900mm.Lens.Is.WEIRD-Tom.Calton-2023.mp4",
-      "folderName": "test-shorts",
-      "streamUrl": "/stream/ae9623fdce783a64a347e6bb0a1063b80dec0789",
+      "id": "vid_123",
+      "title": "Vacation Clip",
+      "sourceName": "vacation.mp4",
+      "folderId": "fld_1",
+      "folderName": "travel-shorts",
+      "streamUrl": "/stream/vid_123",
       "mimeType": "video/mp4",
       "sourceSize": 15759651,
+      "playbackStatus": "direct",
+      "durationSeconds": 43.4,
+      "width": 1080,
+      "height": 1920,
+      "thumbnailSmUrl": "/api/videos/vid_123/thumbnail-sm",
       "updatedAt": 1776554909
     }
   ],
   "meta": {
     "hasMore": false,
-    "total": 3
+    "total": 1
   }
 }
 ```
 
-后续完整 MVP 仍会恢复 `sessionId + cursor` 的 Feed 会话模型。
-
 ### `GET /api/videos/:id`
 
-获取单个视频详情。
-
-当前原型已实现。
+返回单个视频详情。
 
 Response:
 
@@ -160,15 +155,24 @@ Response:
 {
   "success": true,
   "data": {
-    "id": "ae9623fdce783a64a347e6bb0a1063b80dec0789",
-    "title": "This.900mm.Lens.Is.WEIRD Tom.Calton 2023",
-    "sourceName": "This.900mm.Lens.Is.WEIRD-Tom.Calton-2023.mp4",
-    "folderName": "test-shorts",
-    "folderPath": "/Users/franklioxygen/Projects/test-shorts",
-    "streamUrl": "/stream/ae9623fdce783a64a347e6bb0a1063b80dec0789",
+    "id": "vid_123",
+    "title": "Vacation Clip",
+    "sourceName": "vacation.mp4",
+    "folderId": "fld_1",
+    "folderName": "travel-shorts",
+    "folderPath": "/mounts/travel-shorts",
+    "streamUrl": "/stream/vid_123",
     "mimeType": "video/mp4",
     "sourceSize": 15759651,
     "playbackStatus": "direct",
+    "durationSeconds": 43.4,
+    "width": 1080,
+    "height": 1920,
+    "fps": 25,
+    "videoCodec": "h264",
+    "audioCodec": "aac",
+    "thumbnailUrl": "/api/videos/vid_123/thumbnail",
+    "thumbnailSmUrl": "/api/videos/vid_123/thumbnail-sm",
     "playCount": 1,
     "resumePositionSeconds": 33,
     "lastPlayedAt": 1776556213,
@@ -177,34 +181,27 @@ Response:
 }
 ```
 
-### `PATCH /api/videos/:id`
+### `GET /api/videos/:id/thumbnail`
 
-更新视频元数据。
+返回全尺寸 JPG 缩略图。
 
-状态：设计中，当前原型未实现。
+错误码：
 
-Request:
+- `VIDEO_NOT_FOUND`
+- `THUMBNAIL_NOT_FOUND`
 
-```json
-{
-  "title": "New Title",
-  "description": "Updated description",
-  "tags": ["travel", "sunset"],
-  "liked": true
-}
-```
+### `GET /api/videos/:id/thumbnail-sm`
 
-### `DELETE /api/videos/:id`
+返回小尺寸 Feed 缩略图。
 
-软删除视频，不删除磁盘文件。
+错误码：
 
-状态：设计中，当前原型未实现。
+- `VIDEO_NOT_FOUND`
+- `THUMBNAIL_NOT_FOUND`
 
 ### `POST /api/videos/:id/play`
 
 记录一次播放开始。
-
-当前原型已实现。
 
 Request:
 
@@ -212,25 +209,9 @@ Request:
 { "positionSeconds": 0 }
 ```
 
-Response:
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "ae9623fdce783a64a347e6bb0a1063b80dec0789",
-    "lastPlayedAt": 1776556213,
-    "playCount": 1,
-    "resumePositionSeconds": 12
-  }
-}
-```
-
 ### `POST /api/videos/:id/progress`
 
-上报播放进度。
-
-当前原型已实现。
+记录播放进度。
 
 Request:
 
@@ -241,69 +222,27 @@ Request:
 }
 ```
 
-Response:
-
-```json
-{
-  "success": true,
-  "data": {
-    "id": "ae9623fdce783a64a347e6bb0a1063b80dec0789",
-    "lastPlayedAt": 1776556213,
-    "playCount": 1,
-    "resumePositionSeconds": 33
-  }
-}
-```
-
-### `GET /api/videos/:id/thumbnail`
-
-返回全尺寸缩略图。
-
-状态：设计中，当前原型未实现。
-
-### `GET /api/videos/:id/thumbnail-sm`
-
-返回小尺寸缩略图。
-
-状态：设计中，当前原型未实现。
-
----
-
-## 视频流
-
 ### `GET /stream/:id`
 
-流式传输视频文件，支持 HTTP Range。
+按 `videoId` 流式返回媒体文件，支持 HTTP Range。
 
-Headers:
+当前行为：
 
-```text
-Range: bytes=0-1048576
-```
-
-典型响应：
-
-```text
-206 Partial Content
-Content-Type: video/mp4
-Content-Range: bytes 0-1048576/12345678
-Accept-Ranges: bytes
-```
-
-当前原型会先从 SQLite `videos` 表解析 `videoId`，再从对应源文件流式输出。
+- 先查 SQLite 索引
+- `direct` 读取 `source_path`
+- `ready` 读取 `playback_path`
+- 不接受任何任意磁盘路径
 
 错误码：
 
 - `VIDEO_NOT_FOUND`
+- `VIDEO_NOT_PLAYABLE`
+- `FILE_MISSING`
 - `RANGE_NOT_SATISFIABLE`
-
----
-
-## 文件夹
 
 ### `GET /api/folders`
 
-列出所有挂载路径。
+列出所有已注册挂载源。
 
 Response:
 
@@ -312,16 +251,16 @@ Response:
   "success": true,
   "data": [
     {
-      "id": "f11fed3869384089b3ee110eccef83e3364322ab",
-      "name": "test-shorts",
-      "mountPath": "/Users/franklioxygen/Projects/test-shorts",
+      "id": "fld_1",
+      "name": "travel-shorts",
+      "mountPath": "/mounts/travel-shorts",
       "isActive": true,
       "isSystem": false,
       "autoScan": false,
       "scanIntervalMinutes": null,
       "maxDepth": null,
       "scanStatus": "ready",
-      "lastScannedAt": null,
+      "lastScannedAt": 1776557090,
       "videoCount": 3
     }
   ]
@@ -330,9 +269,7 @@ Response:
 
 ### `POST /api/folders`
 
-添加挂载路径。
-
-当前原型已实现。
+注册挂载路径。
 
 Request:
 
@@ -340,9 +277,9 @@ Request:
 {
   "name": "Travel Shorts",
   "mountPath": "/mounts/travel-shorts",
-  "autoScan": true,
-  "scanIntervalMinutes": 60,
-  "maxDepth": 6
+  "autoScan": false,
+  "scanIntervalMinutes": null,
+  "maxDepth": null
 }
 ```
 
@@ -356,49 +293,31 @@ Request:
 
 说明：
 
-- `mountPath` 必须位于服务端配置的 `ALLOWED_MOUNT_ROOTS` 之下，默认是 `/mounts`
-- 如果数据库里还没有任何挂载记录，服务端会在首次启动时把现有允许根目录一次性导入为挂载源
-
-### `PATCH /api/folders/:id`
-
-更新挂载目录配置。
-
-状态：设计中，当前原型未实现。
-
-Request:
-
-```json
-{
-  "name": "Travel Shorts",
-  "autoScan": true,
-  "scanIntervalMinutes": 30,
-  "maxDepth": 4,
-  "isActive": true
-}
-```
-
-语义：
-
-- `isActive=false` 会停用该挂载目录，并把该目录下已有视频统一隐藏
-- `isActive=true` 会重新启用该挂载目录；视频可见性在下一次扫描后恢复
-- `autoScan=false` 仅关闭自动扫描，不影响手动扫描
+- `mountPath` 必须位于 `ALLOWED_MOUNT_ROOTS` 之下
+- 如果数据库还是空库，首次启动会把当前允许根一次性导入为默认挂载源
+- 创建成功后目录会立即进入后台扫描，返回值里的 `scanStatus` 可能是 `scanning`
 
 ### `DELETE /api/folders/:id`
 
-移除挂载路径，不删除外部文件。
+移除挂载配置，不删除磁盘文件。
 
-当前原型已实现。
+错误码：
 
-说明：
-
-- 当前原型删除的是挂载配置本身，不删除磁盘文件
-- 删除最后一个挂载后，不会再次自动从环境变量补回；需要显式重新注册
+- `FOLDER_NOT_FOUND`
+- `FOLDER_PROTECTED`
+- `FOLDER_SCAN_IN_PROGRESS`
 
 ### `POST /api/folders/:id/scan`
 
-触发立即扫描。
+立即扫描指定挂载目录。
 
-当前原型已实现。
+当前行为：
+
+- 接口会立即返回 `202 Accepted`
+- 返回值里的 `scanStatus` 会先变成 `scanning`
+- 真正的目录扫描在后台继续执行，不再把 HTTP 请求挂到结束
+- 扫描过程中若遇到非直播放视频，仍会创建 `transcode` job
+- 当前扫描本身还不是持久化 `job`，服务重启会中断本轮扫描
 
 Response:
 
@@ -406,75 +325,46 @@ Response:
 {
   "success": true,
   "data": {
-    "id": "f11fed3869384089b3ee110eccef83e3364322ab",
-    "name": "test-shorts",
-    "mountPath": "/Users/franklioxygen/Projects/test-shorts",
-    "scanStatus": "ready",
+    "id": "fld_1",
+    "name": "travel-shorts",
+    "mountPath": "/mounts/travel-shorts",
+    "scanStatus": "scanning",
     "lastScannedAt": 1776557090,
     "videoCount": 3
   }
 }
 ```
 
-说明：
-
-- 该接口会刷新该文件夹在 SQLite `videos` 表中的快照
-
 ### `GET /api/folders/:id/videos`
 
-列出某文件夹的视频。
+返回某个挂载源下的视频列表。
 
-当前原型已实现。
+当前不支持分页、排序和筛选参数。
 
-Query:
+返回字段已包含：
 
-| 参数 | 类型 | 默认 | 说明 |
-|------|------|------|------|
-| `page` | number | - | 预留；当前原型忽略 |
-| `limit` | number | - | 预留；当前原型忽略 |
-| `sort` | string | - | 预留；当前原型忽略 |
+- `playbackStatus`
+- `durationSeconds`
+- `width`
+- `height`
+- `thumbnailSmUrl`
 
-Response:
+`scanStatus` 当前可能是：
 
-```json
-{
-  "success": true,
-  "data": [
-    {
-      "id": "ae9623fdce783a64a347e6bb0a1063b80dec0789",
-      "folderId": "f11fed3869384089b3ee110eccef83e3364322ab",
-      "folderName": "test-shorts",
-      "title": "This.900mm.Lens.Is.WEIRD Tom.Calton 2023",
-      "sourceName": "This.900mm.Lens.Is.WEIRD-Tom.Calton-2023.mp4",
-      "streamUrl": "/stream/ae9623fdce783a64a347e6bb0a1063b80dec0789",
-      "mimeType": "video/mp4",
-      "sourceSize": 15759651,
-      "updatedAt": 1776554909,
-      "playCount": 1,
-      "resumePositionSeconds": 52
-    }
-  ],
-  "meta": {
-    "folderName": "test-shorts",
-    "total": 3
-  }
-}
-```
-
----
-
-## 上传
+- `pending`
+- `scanning`
+- `ready`
+- `empty`
+- `error`
 
 ### `POST /api/uploads`
 
-上传 1 个或多个视频文件。
-
-当前原型已实现。
+上传一个或多个视频文件。
 
 Request:
 
 - `multipart/form-data`
-- 字段：`files[]`
+- 字段：`files[]` 或 `files`
 
 Response:
 
@@ -485,14 +375,14 @@ Response:
     "uploadBatchId": "upl_123",
     "accepted": 1,
     "rejected": [],
-    "folderId": "a390b29c0f39b16791ad35b26f6cd4eb675eb2b5",
+    "folderId": "uploads_folder",
     "folderName": "Uploads",
     "videos": [
       {
-        "id": "ba1343eb71133514a5e28bbeff2b17fcae72d6f2",
-        "title": "UMP45 FrenchGunGuy 2024",
-        "sourceName": "UMP45-FrenchGunGuy-2024.mp4",
-        "streamUrl": "/stream/ba1343eb71133514a5e28bbeff2b17fcae72d6f2"
+        "id": "vid_456",
+        "title": "upload clip",
+        "sourceName": "upload-clip.mp4",
+        "streamUrl": "/stream/vid_456"
       }
     ]
   }
@@ -501,9 +391,22 @@ Response:
 
 说明：
 
-- 上传文件会写入系统内置的 `Uploads` 来源目录
-- 上传成功后，服务端会立即重扫该目录并刷新 SQLite `videos` 索引
-- 浏览器网络上传进度由前端本地上报
+- 文件先进入 `backend/uploads/tmp`
+- 然后原子移动到 `backend/uploads/videos/<batch>/`
+- 上传完成后会立即重扫 `Uploads` 来源
+- 若视频不满足直播放行规则，会自动创建 `transcode` job
+
+### `GET /api/jobs`
+
+返回最近的后台任务列表。
+
+当前已实现的 job 类型只有：
+
+- `transcode`
+
+### `GET /api/jobs/:id`
+
+返回单个任务状态。
 
 错误码：
 
@@ -511,42 +414,63 @@ Response:
 - `FILE_TYPE_NOT_ALLOWED`
 - `FILE_TOO_LARGE`
 - `UPLOAD_WRITE_FAILED`
-- `FOLDER_PROTECTED`
 
----
+## 4. 当前未实现但已设计的接口
 
-## 任务
+### `PATCH /api/videos/:id`
 
-### `GET /api/jobs/:id`
+用途：
 
-获取任务状态。
+- 修改 `title`
+- 修改 `description`
+- 修改 `liked`
+- 修改 `hidden`
+- 修改 `tags`
 
-Response:
+建议 Request：
 
 ```json
 {
-  "success": true,
-  "data": {
-    "id": "job_scan_123",
-    "type": "scan",
-    "status": "running",
-    "attemptCount": 1,
-    "relatedEntityType": "folder",
-    "relatedEntityId": "fld_1",
-    "progressCurrent": 120,
-    "progressTotal": 300,
-    "progressMessage": "Scanning /mounts/travel-shorts",
-    "lastError": null,
-    "createdAt": 1713456000,
-    "startedAt": 1713456010,
-    "finishedAt": null
-  }
+  "title": "New Title",
+  "description": "Updated description",
+  "liked": true,
+  "hidden": false,
+  "tags": ["travel", "beach"]
 }
 ```
 
+设计要求：
+
+- 允许部分更新
+- 标签由服务端做归一化和去重
+- 返回更新后的完整视频详情
+
+### `DELETE /api/videos/:id`
+
+语义：
+
+- 软删除
+- 不删除磁盘源文件
+- 等价于 `hidden=1`
+
+### `PATCH /api/folders/:id`
+
+用途：
+
+- 修改 `name`
+- 修改 `autoScan`
+- 修改 `scanIntervalMinutes`
+- 修改 `maxDepth`
+- 修改 `isActive`
+
+语义：
+
+- `isActive=false` 时，目录本身停用，相关视频不再进入 Feed
+- `autoScan=false` 时，仅关闭自动扫描，不影响手动扫描
+
 ### `GET /api/jobs/:id/events`
 
-通过 SSE 订阅任务状态。
+通过 SSE 订阅任务进度。
 
 Events:
 
@@ -561,81 +485,73 @@ event: error
 data: {"status":"failed","lastError":"ffprobe failed"}
 ```
 
----
-
-## 标签
-
 ### `GET /api/tags`
 
-返回标签列表和引用计数。
-
-Response:
-
-```json
-{
-  "success": true,
-  "data": [
-    { "name": "travel", "count": 12 },
-    { "name": "beach", "count": 4 }
-  ]
-}
-```
-
----
-
-## 设置
+返回标签列表及引用计数。
 
 ### `GET /api/settings`
 
-Response:
+返回当前设置。
 
-```json
-{
-  "success": true,
-  "data": {
-    "feedDefaultMode": "random",
-    "autoplayEnabled": true,
-    "loopVideo": false,
-    "transcodeEnabled": true,
-    "maxUploadSizeMb": 500
-  }
-}
-```
+建议字段：
+
+- `feedDefaultMode`
+- `autoplayEnabled`
+- `loopVideo`
+- `transcodeEnabled`
+- `maxUploadSizeMb`
 
 ### `PATCH /api/settings`
 
 更新非安全设置。
 
-Request:
-
-```json
-{
-  "feedDefaultMode": "latest",
-  "autoplayEnabled": false
-}
-```
-
 ### `POST /api/settings/password`
 
-修改登录密码，并使所有会话失效。
+修改登录密码。
 
-Request:
+设计要求：
 
-```json
-{
-  "currentPassword": "old_password",
-  "newPassword": "new_password"
-}
-```
+- 校验当前密码
+- 更新 `password_hash`
+- 删除所有旧会话
 
----
+## 5. 后续接口演进规则
 
-## 健康检查
+### 5.1 认证恢复
 
-### `GET /api/health/live`
+当前虽然有 `/api/auth/*`，但还没有统一把写接口保护起来。  
+恢复正式鉴权后：
 
-进程存活检查。
+- 登录成功返回 `mikmok_session`
+- 同时下发 `mikmok_csrf`
+- 所有写接口要求 `X-CSRF-Token`
 
-### `GET /api/health/ready`
+### 5.2 任务化迁移
 
-检查数据库、上传目录、FFmpeg、FFprobe 是否就绪。
+当前只有上传这条链路后续还会进一步升级为持久化异步 job；扫描已经先变成了后台异步执行：
+
+- `POST /api/folders/:id/scan`
+- `POST /api/uploads`
+
+演进策略：
+
+- 优先保持旧字段
+- 在响应中追加 `jobId`
+- 需要较长执行时间时使用或保留 `202 Accepted`
+
+### 5.3 Feed 会话化
+
+后续 `GET /api/videos/feed` 会增加：
+
+- `mode`
+- `sessionId`
+- `cursor`
+- `limit`
+- `folderId`
+- `tag`
+- `likedOnly`
+
+但兼容策略是：
+
+- 首页无参请求仍然返回第一页
+- 原型前端不需要马上重写

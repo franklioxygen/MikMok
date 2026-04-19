@@ -79,7 +79,7 @@ foldersRouter.post("/:id/scan", async (request, response) => {
     scanStatus: folder.folder.scanStatus,
     lastScannedAt: folder.folder.lastScannedAt,
     videoCount: folder.videoCount
-  });
+  }, undefined, 202);
 });
 
 foldersRouter.delete("/:id", async (request, response) => {
@@ -118,6 +118,11 @@ foldersRouter.get("/:id/videos", async (request, response) => {
         streamUrl: `/stream/${video.id}`,
         mimeType: video.mimeType,
         sourceSize: video.sourceSize,
+        playbackStatus: video.playbackStatus,
+        durationSeconds: video.durationSeconds,
+        width: video.width,
+        height: video.height,
+        thumbnailSmUrl: video.thumbnailSmPath ? `/api/videos/${video.id}/thumbnail-sm` : null,
         updatedAt: Math.floor(video.sourceMtimeMs / 1000),
         playCount: playbackState.playCount,
         resumePositionSeconds: playbackState.resumePositionSeconds

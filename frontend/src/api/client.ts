@@ -12,7 +12,7 @@ type ApiSuccess<T> = {
 
 type ApiResponse<T> = ApiFailure | ApiSuccess<T>;
 
-const apiBaseUrl = import.meta.env.VITE_API_URL ?? "/api";
+export const apiBaseUrl = import.meta.env.VITE_API_URL ?? "/api";
 
 export async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);

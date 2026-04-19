@@ -23,7 +23,7 @@ type LibraryFolder = {
 class MediaLibraryService {
   async listVideos(): Promise<LibraryVideo[]> {
     await mountedFolderService.ensureSeededFromAllowedRoots();
-    return videoIndexService.listActiveVideos();
+    return videoIndexService.listFeedVideos();
   }
 
   async listFolders(): Promise<LibraryFolder[]> {

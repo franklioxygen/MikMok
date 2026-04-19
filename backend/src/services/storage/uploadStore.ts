@@ -9,6 +9,9 @@ const __dirname = dirname(__filename);
 const uploadsRootDirectory = path.resolve(__dirname, "../../../uploads");
 const uploadVideosDirectory = path.join(uploadsRootDirectory, "videos");
 const uploadTempDirectory = path.join(uploadsRootDirectory, "tmp");
+const uploadTranscodesDirectory = path.join(uploadsRootDirectory, "transcodes");
+const uploadThumbnailsDirectory = path.join(uploadsRootDirectory, "thumbnails");
+const uploadThumbnailsSmallDirectory = path.join(uploadsRootDirectory, "thumbnails-sm");
 
 const unsafeCharactersPattern = /[^a-zA-Z0-9._-]+/g;
 
@@ -28,6 +31,9 @@ class UploadStoreService {
   ensureDirectories(): void {
     mkdirSync(uploadVideosDirectory, { recursive: true });
     mkdirSync(uploadTempDirectory, { recursive: true });
+    mkdirSync(uploadTranscodesDirectory, { recursive: true });
+    mkdirSync(uploadThumbnailsDirectory, { recursive: true });
+    mkdirSync(uploadThumbnailsSmallDirectory, { recursive: true });
   }
 
   getVideosDirectory(): string {
@@ -36,6 +42,18 @@ class UploadStoreService {
 
   getTempDirectory(): string {
     return uploadTempDirectory;
+  }
+
+  getTranscodesDirectory(): string {
+    return uploadTranscodesDirectory;
+  }
+
+  getThumbnailPath(videoId: string): string {
+    return path.join(uploadThumbnailsDirectory, `${videoId}.jpg`);
+  }
+
+  getSmallThumbnailPath(videoId: string): string {
+    return path.join(uploadThumbnailsSmallDirectory, `${videoId}.jpg`);
   }
 
   async finalizeUpload(tempPath: string, originalName: string): Promise<string> {

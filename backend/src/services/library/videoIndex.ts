@@ -1,39 +1,81 @@
 import { createHash } from "node:crypto";
 
 import { db } from "../../db/index.js";
+import type { PlaybackStatus } from "../media/playbackPolicy.js";
 import type { ScannedVideo } from "./scanner.js";
 
+type PersistedVideoInput = ScannedVideo & {
+  audioCodec: string | null;
+  container: string | null;
+  durationSeconds: number | null;
+  fps: number | null;
+  height: number | null;
+  playbackPath: string | null;
+  playbackStatus: string;
+  thumbnailPath: string | null;
+  thumbnailSmPath: string | null;
+  videoCodec: string | null;
+  width: number | null;
+};
+
 type IndexedVideoRow = {
+  audio_codec: string | null;
+  container: string | null;
+  duration_seconds: number | null;
   extension: string;
+  fps: number | null;
   folder_id: string;
   folder_name: string;
   folder_path: string;
+  height: number | null;
   id: string;
   mime_type: string;
+  playback_path: string | null;
+  playback_status: string | null;
   source_mtime_ms: number;
   source_name: string;
   source_path: string;
   source_size: number;
+  thumbnail_path: string | null;
+  thumbnail_sm_path: string | null;
   title: string;
+  video_codec: string | null;
+  width: number | null;
 };
 
 type IndexedVideo = {
+  audioCodec: string | null;
+  container: string | null;
+  durationSeconds: number | null;
   extension: string;
+  fps: number | null;
   folderId: string;
   folderName: string;
   folderPath: string;
+  height: number | null;
   id: string;
   mimeType: string;
+  playbackPath: string | null;
+  playbackStatus: string;
   sourceMtimeMs: number;
   sourceName: string;
   sourcePath: string;
   sourceSize: number;
+  thumbnailPath: string | null;
+  thumbnailSmPath: string | null;
   title: string;
+  videoCodec: string | null;
+  width: number | null;
 };
 
 type FolderVideoCountRow = {
   folder_id: string;
   video_count: number;
+};
+
+type UpdatePlaybackArtifactsInput = {
+  playbackPath: string | null;
+  playbackStatus: PlaybackStatus;
 };
 
 function normalizeIndexedVideo(row: IndexedVideoRow): IndexedVideo {
@@ -47,8 +89,19 @@ function normalizeIndexedVideo(row: IndexedVideoRow): IndexedVideo {
     folderId: row.folder_id,
     folderName: row.folder_name,
     folderPath: row.folder_path,
+    container: row.container,
     extension: row.extension,
-    mimeType: row.mime_type
+    mimeType: row.mime_type,
+    videoCodec: row.video_codec,
+    audioCodec: row.audio_codec,
+    durationSeconds: row.duration_seconds,
+    width: row.width,
+    height: row.height,
+    fps: row.fps,
+    thumbnailPath: row.thumbnail_path,
+    thumbnailSmPath: row.thumbnail_sm_path,
+    playbackPath: row.playback_path,
+    playbackStatus: row.playback_status ?? "direct"
   };
 }
 
@@ -67,6 +120,17 @@ class VideoIndexService {
       videos.source_mtime_ms,
       videos.mime_type,
       videos.extension,
+      videos.container,
+      videos.video_codec,
+      videos.audio_codec,
+      videos.duration_seconds,
+      videos.width,
+      videos.height,
+      videos.fps,
+      videos.thumbnail_path,
+      videos.thumbnail_sm_path,
+      videos.playback_path,
+      videos.playback_status,
       mounted_folders.id AS folder_id,
       mounted_folders.name AS folder_name,
       mounted_folders.mount_path AS folder_path
@@ -83,16 +147,27 @@ class VideoIndexService {
       source_path,
       mime_type,
       extension,
+      container,
+      video_codec,
+      audio_codec,
+      duration_seconds,
+      width,
+      height,
+      fps,
+      thumbnail_path,
+      thumbnail_sm_path,
+      playback_path,
+      playback_status,
       source_size,
       source_mtime_ms,
       indexed_at
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   private readonly deleteByFolderStatement = db.prepare("DELETE FROM videos WHERE folder_id = ?");
 
   private readonly replaceFolderVideosTransaction = db.transaction(
-    (folderId: string, scannedVideos: ScannedVideo[], indexedAt: number) => {
+    (folderId: string, scannedVideos: PersistedVideoInput[], indexedAt: number) => {
       this.deleteByFolderStatement.run(folderId);
 
       for (const video of scannedVideos) {
@@ -104,6 +179,17 @@ class VideoIndexService {
           video.sourcePath,
           video.mimeType,
           video.extension,
+          video.container,
+          video.videoCodec,
+          video.audioCodec,
+          video.durationSeconds,
+          video.width,
+          video.height,
+          video.fps,
+          video.thumbnailPath,
+          video.thumbnailSmPath,
+          video.playbackPath,
+          video.playbackStatus,
           video.sourceSize,
           video.sourceMtimeMs,
           indexedAt
@@ -112,9 +198,11 @@ class VideoIndexService {
     }
   );
 
-  listActiveVideos(): IndexedVideo[] {
+  listFeedVideos(): IndexedVideo[] {
     const rows = db
-      .prepare(`${this.baseSelect} WHERE mounted_folders.is_active = 1 ORDER BY videos.source_mtime_ms DESC, videos.title ASC`)
+      .prepare(
+        `${this.baseSelect} WHERE mounted_folders.is_active = 1 AND COALESCE(videos.playback_status, 'direct') IN ('direct', 'ready') ORDER BY videos.source_mtime_ms DESC, videos.title ASC`
+      )
       .all() as IndexedVideoRow[];
 
     return rows.map((row) => normalizeIndexedVideo(row));
@@ -128,6 +216,20 @@ class VideoIndexService {
     return row ? normalizeIndexedVideo(row) : null;
   }
 
+  findVideoById(videoId: string): IndexedVideo | null {
+    const row = db.prepare(`${this.baseSelect} WHERE videos.id = ? LIMIT 1`).get(videoId) as IndexedVideoRow | undefined;
+
+    return row ? normalizeIndexedVideo(row) : null;
+  }
+
+  findVideoBySourcePath(sourcePath: string): IndexedVideo | null {
+    const row = db.prepare(`${this.baseSelect} WHERE videos.source_path = ? LIMIT 1`).get(sourcePath) as
+      | IndexedVideoRow
+      | undefined;
+
+    return row ? normalizeIndexedVideo(row) : null;
+  }
+
   listVideosByFolderId(folderId: string): IndexedVideo[] {
     const rows = db
       .prepare(`${this.baseSelect} WHERE videos.folder_id = ? ORDER BY videos.source_mtime_ms DESC, videos.title ASC`)
@@ -136,13 +238,22 @@ class VideoIndexService {
     return rows.map((row) => normalizeIndexedVideo(row));
   }
 
-  replaceFolderVideos(folderId: string, scannedVideos: ScannedVideo[]): number {
+  replaceFolderVideos(folderId: string, scannedVideos: PersistedVideoInput[]): number {
     this.replaceFolderVideosTransaction(folderId, scannedVideos, Math.floor(Date.now() / 1000));
     return scannedVideos.length;
   }
 
   clearFolderVideos(folderId: string): void {
     this.deleteByFolderStatement.run(folderId);
+  }
+
+  updatePlaybackArtifacts(videoId: string, input: UpdatePlaybackArtifactsInput): void {
+    db.prepare("UPDATE videos SET playback_path = ?, playback_status = ? WHERE id = ?")
+      .run(input.playbackPath, input.playbackStatus, videoId);
+  }
+
+  updatePlaybackStatus(videoId: string, playbackStatus: PlaybackStatus): void {
+    db.prepare("UPDATE videos SET playback_status = ? WHERE id = ?").run(playbackStatus, videoId);
   }
 
   getVideoCountByFolderIds(folderIds: string[]): Map<string, number> {
@@ -173,4 +284,5 @@ class VideoIndexService {
 
 export const videoIndexService = new VideoIndexService();
 
+export { buildVideoId };
 export type { IndexedVideo };

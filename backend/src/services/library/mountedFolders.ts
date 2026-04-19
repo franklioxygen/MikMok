@@ -5,10 +5,12 @@ import path from "node:path";
 
 import { env } from "../../config/env.js";
 import { db } from "../../db/index.js";
+import { jobWorkerService } from "../jobs/jobWorker.js";
+import { mediaProcessor } from "../media/mediaProcessor.js";
+import { uploadStoreService } from "../storage/uploadStore.js";
 import { AppError } from "../../utils/http.js";
 import { collectVideosFromDirectory } from "./scanner.js";
-import { videoIndexService } from "./videoIndex.js";
-import { uploadStoreService } from "../storage/uploadStore.js";
+import { buildVideoId, videoIndexService } from "./videoIndex.js";
 
 const uploadsFolderName = "Uploads";
 
@@ -124,6 +126,7 @@ async function resolveAllowedRootPaths(): Promise<string[]> {
 }
 
 class MountedFolderService {
+  private readonly activeScans = new Map<string, Promise<void>>();
   private indexSeedPromise: Promise<void> | null = null;
   private seedPromise: Promise<void> | null = null;
 
@@ -211,12 +214,21 @@ class MountedFolderService {
       scanIntervalMinutes: input.scanIntervalMinutes
     });
 
-    return this.scanFolderRecord(folder);
+    const queuedFolder = await this.queueFolderScan(folder);
+
+    return {
+      folder: queuedFolder,
+      videoCount: videoIndexService.getVideoCountByFolderId(queuedFolder.id)
+    };
   }
 
   async deleteFolder(folderId: string): Promise<MountedFolder | null> {
     if (this.isProtectedFolderId(folderId)) {
       throw new AppError(400, "FOLDER_PROTECTED", "This folder source is managed by the system.");
+    }
+
+    if (this.activeScans.has(folderId)) {
+      throw new AppError(409, "FOLDER_SCAN_IN_PROGRESS", "Folder scan is still running.");
     }
 
     const folder = await this.findFolderById(folderId);
@@ -237,7 +249,12 @@ class MountedFolderService {
       return null;
     }
 
-    return this.scanFolderRecord(folder);
+    const queuedFolder = await this.queueFolderScan(folder);
+
+    return {
+      folder: queuedFolder,
+      videoCount: videoIndexService.getVideoCountByFolderId(queuedFolder.id)
+    };
   }
 
   async getUploadsFolder(): Promise<MountedFolder> {
@@ -369,8 +386,18 @@ class MountedFolderService {
       const scannedVideos = await collectVideosFromDirectory(mountPath, {
         maxDepth: folder.maxDepth
       });
-      const videoCount = videoIndexService.replaceFolderVideos(folder.id, scannedVideos);
+      const processedVideos = await mediaProcessor.processScannedVideos(scannedVideos);
+      const videoCount = videoIndexService.replaceFolderVideos(folder.id, processedVideos);
+      const transcodeVideoIds = processedVideos
+        .filter((video) => video.playbackStatus === "needs_transcode" || video.playbackStatus === "failed")
+        .map((video) => buildVideoId(video.sourcePath));
       const scanStatus = videoCount > 0 ? "ready" : "empty";
+
+      if (transcodeVideoIds.length > 0) {
+        await jobWorkerService.enqueueTranscodes(transcodeVideoIds).catch((error: unknown) => {
+          console.error("Failed to enqueue transcode jobs.", error);
+        });
+      }
 
       db.prepare("UPDATE mounted_folders SET mount_path = ?, scan_status = ?, last_scanned_at = ?, updated_at = ? WHERE id = ?")
         .run(mountPath, scanStatus, timestamp, timestamp, folder.id);
@@ -392,6 +419,39 @@ class MountedFolderService {
 
       throw error;
     }
+  }
+
+  private async queueFolderScan(folder: MountedFolder): Promise<MountedFolder> {
+    const existingScan = this.activeScans.get(folder.id);
+
+    if (existingScan) {
+      const currentFolder = await this.findFolderById(folder.id);
+      return currentFolder ?? folder;
+    }
+
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    db.prepare("UPDATE mounted_folders SET scan_status = ?, updated_at = ? WHERE id = ?")
+      .run("scanning", timestamp, folder.id);
+
+    const queuedFolder: MountedFolder = {
+      ...folder,
+      scanStatus: "scanning",
+      updatedAt: timestamp
+    };
+
+    const scanPromise = this.scanFolderRecord(queuedFolder)
+      .then(() => undefined)
+      .catch((error: unknown) => {
+        console.error(`Failed to scan mounted folder ${folder.id}.`, error);
+      })
+      .finally(() => {
+        this.activeScans.delete(folder.id);
+      });
+
+    this.activeScans.set(folder.id, scanPromise);
+
+    return queuedFolder;
   }
 
   private writeAppState(key: string, value: string): void {

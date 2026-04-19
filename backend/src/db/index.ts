@@ -17,6 +17,20 @@ export const dbConfig = {
 
 export const db = new Database(filename);
 
+type TableInfoRow = {
+  name: string;
+};
+
+function ensureColumn(tableName: string, columnName: string, definition: string): void {
+  const rows = db.prepare(`PRAGMA table_info(${tableName})`).all() as TableInfoRow[];
+
+  if (rows.some((row) => row.name === columnName)) {
+    return;
+  }
+
+  db.exec(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition}`);
+}
+
 export function initializeDatabase(): void {
   db.pragma("journal_mode = WAL");
   db.pragma("foreign_keys = ON");
@@ -70,6 +84,49 @@ export function initializeDatabase(): void {
       last_played_at INTEGER,
       updated_at INTEGER NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS jobs (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      related_entity_type TEXT,
+      related_entity_id TEXT,
+      payload_json TEXT NOT NULL,
+      progress_current INTEGER NOT NULL DEFAULT 0,
+      progress_total INTEGER NOT NULL DEFAULT 0,
+      progress_message TEXT,
+      attempt_count INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      created_at INTEGER NOT NULL,
+      started_at INTEGER,
+      finished_at INTEGER,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_jobs_status_created_at
+      ON jobs(status, created_at ASC);
+
+    CREATE INDEX IF NOT EXISTS idx_jobs_related_entity
+      ON jobs(related_entity_type, related_entity_id, created_at DESC);
+  `);
+
+  ensureColumn("videos", "container", "TEXT");
+  ensureColumn("videos", "video_codec", "TEXT");
+  ensureColumn("videos", "audio_codec", "TEXT");
+  ensureColumn("videos", "duration_seconds", "REAL");
+  ensureColumn("videos", "width", "INTEGER");
+  ensureColumn("videos", "height", "INTEGER");
+  ensureColumn("videos", "fps", "REAL");
+  ensureColumn("videos", "thumbnail_path", "TEXT");
+  ensureColumn("videos", "thumbnail_sm_path", "TEXT");
+  ensureColumn("videos", "playback_path", "TEXT");
+  ensureColumn("videos", "playback_status", "TEXT NOT NULL DEFAULT 'direct'");
+
+  db.prepare("UPDATE videos SET playback_status = 'direct' WHERE playback_status IS NULL OR playback_status = ''").run();
+  db.prepare("UPDATE jobs SET status = 'queued', updated_at = strftime('%s','now') WHERE status = 'running'").run();
+  db.exec(`
+    CREATE INDEX IF NOT EXISTS idx_videos_playback_status
+      ON videos(playback_status, source_mtime_ms DESC);
   `);
 }
 

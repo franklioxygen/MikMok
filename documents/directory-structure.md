@@ -1,176 +1,171 @@
 # MikMok — 目录结构
 
-以下目录结构对应当前设计文档中的可实施 MVP 方案。
+本文档区分两部分：
+
+- 当前仓库已经存在的目录与文件
+- 为补齐剩余缺口而建议新增的目录
+
+## 1. 当前仓库结构
 
 ```text
 mikmok/
 ├── backend/
 │   ├── src/
-│   │   ├── app.ts                         # Express app，注册中间件与路由
+│   │   ├── app.ts                         # Express app，注册 API、stream、静态前端
 │   │   ├── server.ts                      # HTTP 启动入口
 │   │   ├── config/
 │   │   │   └── env.ts                     # 环境变量读取与校验
 │   │   ├── db/
-│   │   │   ├── index.ts                   # Drizzle + SQLite 连接
-│   │   │   ├── schema.ts                  # 表结构定义
-│   │   │   └── migrations/                # 迁移文件
+│   │   │   ├── index.ts                   # SQLite 连接与建表
+│   │   │   └── schema.ts                  # 预留 schema 入口，当前仍是占位
+│   │   ├── middleware/
+│   │   │   └── errorHandler.ts            # 统一错误响应
 │   │   ├── routes/
 │   │   │   ├── auth.ts                    # /api/auth/*
-│   │   │   ├── videos.ts                  # /api/videos/*
 │   │   │   ├── folders.ts                 # /api/folders/*
-│   │   │   ├── uploads.ts                 # /api/uploads
+│   │   │   ├── health.ts                  # /api/health
 │   │   │   ├── jobs.ts                    # /api/jobs/*
-│   │   │   ├── settings.ts                # /api/settings*
-│   │   │   ├── tags.ts                    # /api/tags
 │   │   │   ├── stream.ts                  # /stream/:id
-│   │   │   └── health.ts                  # /api/health/*
-│   │   ├── controllers/
-│   │   │   ├── authController.ts
-│   │   │   ├── videoController.ts
-│   │   │   ├── folderController.ts
-│   │   │   ├── uploadController.ts
-│   │   │   ├── jobController.ts
-│   │   │   ├── settingsController.ts
-│   │   │   ├── tagController.ts
-│   │   │   ├── streamController.ts
-│   │   │   └── healthController.ts
+│   │   │   ├── uploads.ts                 # /api/uploads
+│   │   │   └── videos.ts                  # /api/videos/*
 │   │   ├── services/
 │   │   │   ├── auth/
-│   │   │   │   ├── AuthService.ts         # 密码校验与登录登出
-│   │   │   │   ├── SessionService.ts      # 会话生成、存储、失效
-│   │   │   │   └── PasswordBootstrap.ts   # 首次启动密码初始化
-│   │   │   ├── feed/
-│   │   │   │   ├── FeedBuilder.ts         # Feed 结果构建
-│   │   │   │   └── FeedSessionStore.ts    # 30 分钟 TTL 的内存会话
+│   │   │   │   ├── AuthService.ts         # 当前密码校验
+│   │   │   │   └── SessionService.ts      # 当前内存会话
 │   │   │   ├── jobs/
-│   │   │   │   ├── JobRepository.ts       # jobs 表访问
-│   │   │   │   ├── JobQueue.ts            # 内存任务调度
-│   │   │   │   ├── JobWorker.ts           # worker 执行器
-│   │   │   │   └── JobEvents.ts           # SSE 事件分发
+│   │   │   │   ├── jobService.ts          # SQLite jobs 访问
+│   │   │   │   └── jobWorker.ts           # 进程内 job worker
 │   │   │   ├── library/
-│   │   │   │   ├── VideoService.ts        # 视频查询、编辑、隐藏
-│   │   │   │   ├── FolderService.ts       # 挂载目录管理
-│   │   │   │   ├── FolderScanner.ts       # 扫描外部目录
-│   │   │   │   └── TagService.ts          # 标签增删改查
+│   │   │   │   ├── mediaLibrary.ts        # Feed / folder / stream 查询
+│   │   │   │   ├── mountedFolders.ts      # 挂载目录注册与扫描
+│   │   │   │   ├── playbackState.ts       # 播放状态持久化
+│   │   │   │   ├── scanner.ts             # 扫描目录中的视频文件
+│   │   │   │   └── videoIndex.ts          # SQLite 视频索引访问
 │   │   │   ├── media/
-│   │   │   │   ├── MetadataExtractor.ts   # FFprobe 封装
-│   │   │   │   ├── ThumbnailService.ts    # 缩略图生成
-│   │   │   │   ├── PlaybackResolver.ts    # 判断直播或转码
-│   │   │   │   └── TranscodeService.ts    # FFmpeg 转码
+│   │   │   │   ├── mediaProcessor.ts      # 扫描时接元数据/缩略图/播放状态
+│   │   │   │   ├── metadataExtractor.ts   # ffprobe 元数据提取
+│   │   │   │   ├── playbackPolicy.ts      # 直播放行规则
+│   │   │   │   ├── thumbnailService.ts    # ffmpeg 缩略图生成
+│   │   │   │   └── transcodeService.ts    # ffmpeg 转码
 │   │   │   └── storage/
-│   │   │       ├── PathGuard.ts           # realpath 与 allowed roots 校验
-│   │   │       ├── UploadStore.ts         # tmp -> videos 原子移动
-│   │   │       └── MountRegistry.ts       # 挂载路径规则校验
-│   │   ├── middleware/
-│   │   │   ├── auth.ts                    # 会话认证
-│   │   │   ├── csrf.ts                    # CSRF 校验
-│   │   │   ├── rateLimit.ts               # 速率限制
-│   │   │   └── errorHandler.ts            # 统一错误响应
-│   │   ├── workers/
-│   │   │   ├── scheduler.ts               # 周期检查 auto scan
-│   │   │   └── startupRecovery.ts         # 重启后恢复 running jobs
+│   │   │       └── uploadStore.ts         # tmp -> videos 原子移动
 │   │   └── utils/
-│   │       ├── time.ts
-│   │       ├── ids.ts
-│   │       └── ffmpeg.ts
-│   ├── data/                              # SQLite 与内部状态
-│   │   └── mikmok.db
-│   ├── uploads/
-│   │   ├── tmp/                           # 上传中的临时文件
-│   │   ├── videos/                        # 上传原始视频
-│   │   ├── transcodes/                    # 转码产物
-│   │   ├── thumbnails/                    # 全尺寸缩略图
-│   │   └── thumbnails-sm/                 # Feed 小图
-│   ├── drizzle.config.ts
-│   ├── tsconfig.json
-│   └── package.json
-│
+│   │       └── http.ts                    # 通用响应与 AppError
+│   ├── Dockerfile
+│   ├── package.json
+│   └── tsconfig.json
 ├── frontend/
 │   ├── src/
-│   │   ├── main.tsx                       # React 入口
-│   │   ├── App.tsx                        # 路由定义
-│   │   ├── pages/
-│   │   │   ├── Feed.tsx                   # 全屏垂直滑动 Feed
-│   │   │   ├── FolderBrowser.tsx          # 文件夹列表
-│   │   │   ├── FolderVideos.tsx           # 单文件夹视频列表
-│   │   │   ├── Upload.tsx                 # 上传页面
-│   │   │   ├── Settings.tsx               # 设置页面
-│   │   │   └── Login.tsx                  # 登录页
-│   │   ├── components/
-│   │   │   ├── FeedStack.tsx              # 当前 / 上一条 / 下一条容器
-│   │   │   ├── VideoPlayer.tsx            # HTML5 视频播放器封装
-│   │   │   ├── VideoOverlay.tsx           # 标题、标签、进度等覆盖层
-│   │   │   ├── ActionBar.tsx              # 喜欢、标签、文件夹入口
-│   │   │   ├── BottomNav.tsx              # 底部导航
-│   │   │   ├── FolderCard.tsx             # 文件夹卡片
-│   │   │   ├── TagFilterSheet.tsx         # 标签筛选
-│   │   │   ├── UploadPanel.tsx            # 上传表单与网络进度
-│   │   │   └── JobProgressSheet.tsx       # 扫描 / 上传后处理进度
-│   │   ├── hooks/
-│   │   │   ├── useAuth.ts                 # 会话状态
-│   │   │   ├── useFeedSession.ts          # Feed sessionId、翻页、会话过期恢复
-│   │   │   ├── useVideoPlayback.ts        # 自动播放 / 进度上报
-│   │   │   ├── useJobEvents.ts            # SSE 任务进度
-│   │   │   └── useUpload.ts               # 上传逻辑
+│   │   ├── main.tsx
+│   │   ├── App.tsx
 │   │   ├── api/
-│   │   │   ├── client.ts                  # fetch/axios 封装
-│   │   │   ├── auth.ts
-│   │   │   ├── videos.ts
-│   │   │   ├── folders.ts
-│   │   │   ├── uploads.ts
-│   │   │   ├── jobs.ts
-│   │   │   ├── settings.ts
-│   │   │   └── tags.ts
+│   │   │   └── client.ts                  # fetch 封装
+│   │   ├── components/
+│   │   │   ├── AppShell.tsx
+│   │   │   └── BottomNav.tsx
+│   │   ├── hooks/
+│   │   │   └── useAuth.tsx
+│   │   ├── pages/
+│   │   │   ├── Feed.tsx
+│   │   │   ├── FolderBrowser.tsx
+│   │   │   ├── FolderVideos.tsx
+│   │   │   ├── Login.tsx
+│   │   │   ├── Settings.tsx
+│   │   │   └── Upload.tsx
 │   │   ├── store/
-│   │   │   ├── uiStore.ts                 # 底部 sheet、当前 tab、静音状态
-│   │   │   └── playbackStore.ts           # 当前 index、feed mode、sessionId
+│   │   │   └── uiStore.ts
 │   │   └── styles/
 │   │       ├── global.css
 │   │       └── variables.css
-│   ├── public/
-│   │   ├── manifest.json
-│   │   └── icons/
 │   ├── index.html
-│   ├── vite.config.ts
-│   ├── tailwind.config.ts
-│   └── package.json
-│
+│   ├── package.json
+│   ├── tsconfig.json
+│   └── vite.config.ts
 ├── documents/
-│   ├── system-design.md
 │   ├── api-endpoints.md
 │   ├── directory-structure.md
-│   └── getting-started.md
-│
-├── docker-compose.yml
-├── Dockerfile
-├── nginx.conf
+│   ├── getting-started.md
+│   └── system-design.md
+├── scripts/
+│   └── release/
+│       ├── build-and-push.sh
+│       └── build-and-push-test.sh
+├── stacks/
+│   └── docker-compose.yml
+├── .dockerignore
 ├── package.json
-└── README.md
+├── package-lock.json
+└── tsconfig.base.json
 ```
 
-## 运行时数据目录
+## 2. 当前运行时数据目录
 
 ```text
-/app/
+/app/backend/
 ├── data/
 │   └── mikmok.db
-├── uploads/
-│   ├── tmp/
-│   ├── videos/
-│   ├── transcodes/
-│   ├── thumbnails/
-│   └── thumbnails-sm/
-└── frontend/dist/
+└── uploads/
+    ├── tmp/
+    ├── videos/
+    ├── transcodes/
+    ├── thumbnails/
+    └── thumbnails-sm/
 
 /mounts/
-├── family-clips/
-└── travel-shorts/
+└── ...
 ```
 
-## 目录设计原则
+说明：
 
-- `uploads/` 由应用自己完全管理
-- `mounts/` 只读，应用不能删除其下文件
-- `tmp/` 与正式存储分离，避免半文件进入视频库
-- `services/` 按领域分组，而不是把所有逻辑堆在一个目录
-- `workers/` 只放后台调度和恢复逻辑，不处理 HTTP
+- `data/` 和 `uploads/` 必须持久化
+- `mounts/` 是只读外部媒体根
+- `transcodes/` 和 `thumbnails*/` 已经被当前原型使用
+
+## 3. 为补齐缺口建议新增
+
+后续要完成任务系统、缩略图、转码、正式鉴权时，建议新增以下目录：
+
+```text
+backend/src/
+├── middleware/
+│   ├── auth.ts                           # 正式会话认证
+│   └── csrf.ts                           # CSRF 校验
+├── routes/
+│   ├── settings.ts                       # /api/settings*
+│   └── tags.ts                           # /api/tags
+├── services/
+│   ├── jobs/
+│   │   ├── JobEvents.ts
+│   │   └── Scheduler.ts
+│   └── tags/
+│       └── TagService.ts
+└── workers/
+    ├── scheduler.ts
+    └── startupRecovery.ts
+```
+
+前端建议新增：
+
+```text
+frontend/src/
+├── api/
+│   ├── jobs.ts
+│   ├── settings.ts
+│   └── tags.ts
+├── hooks/
+│   ├── useJobEvents.ts
+│   ├── useUpload.ts
+│   └── useVideoEditor.ts
+└── components/
+    ├── FeedInfoCard.tsx
+    ├── TagFilterSheet.tsx
+    └── JobProgressSheet.tsx
+```
+
+## 4. 目录设计原则
+
+- `backend/services/library` 继续负责“已入库视频”和“挂载目录”的核心逻辑
+- 媒体处理能力单独放进 `services/media`
+- 后台任务逻辑不要混在 HTTP 路由里，独立到 `services/jobs` 和 `workers`
+- 前端继续保持“页面驱动 + 轻量组件”；复杂度上升后再抽离更多 hooks 和 api 模块
+- 文档中的路径示例优先写容器内路径，避免把宿主机路径误写进 UI

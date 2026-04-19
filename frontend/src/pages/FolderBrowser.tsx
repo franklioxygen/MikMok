@@ -72,6 +72,20 @@ export function FolderBrowserPage() {
     };
   }, [reloadKey]);
 
+  useEffect(() => {
+    if (!folders.some((folder) => folder.scanStatus === "scanning")) {
+      return;
+    }
+
+    const intervalHandle = window.setInterval(() => {
+      setReloadKey((current) => current + 1);
+    }, 2500);
+
+    return () => {
+      window.clearInterval(intervalHandle);
+    };
+  }, [folders]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
@@ -86,7 +100,11 @@ export function FolderBrowserPage() {
         })
       });
 
-      setFeedback(`Mounted ${mountedFolder.name} with ${mountedFolder.videoCount} videos.`);
+      setFeedback(
+        mountedFolder.scanStatus === "scanning"
+          ? `Mounted ${mountedFolder.name}. Background scan started.`
+          : `Mounted ${mountedFolder.name} with ${mountedFolder.videoCount} videos.`
+      );
       setForm(emptyForm);
       setReloadKey((current) => current + 1);
     } catch (submitError) {
@@ -105,7 +123,11 @@ export function FolderBrowserPage() {
         method: "POST"
       });
 
-      setFeedback(`Scanned ${scanResult.name}: ${scanResult.videoCount} videos ready.`);
+      setFeedback(
+        scanResult.scanStatus === "scanning"
+          ? `Started scanning ${scanResult.name}. This can take a while on large folders.`
+          : `Scanned ${scanResult.name}: ${scanResult.videoCount} videos ready.`
+      );
       setReloadKey((current) => current + 1);
     } catch (scanError) {
       setError(scanError instanceof Error ? scanError.message : "Failed to scan folder.");
@@ -210,16 +232,16 @@ export function FolderBrowserPage() {
               </Link>
               <button
                 className="action-chip"
-                disabled={activeFolderId === folder.id}
+                disabled={activeFolderId === folder.id || folder.scanStatus === "scanning"}
                 onClick={() => void handleScan(folder.id)}
                 type="button"
               >
-                {activeFolderId === folder.id ? "Working..." : "Scan now"}
+                {activeFolderId === folder.id || folder.scanStatus === "scanning" ? "Scanning..." : "Scan now"}
               </button>
               {!folder.isSystem ? (
                 <button
                   className="action-chip"
-                  disabled={activeFolderId === folder.id}
+                  disabled={activeFolderId === folder.id || folder.scanStatus === "scanning"}
                   onClick={() => void handleDelete(folder.id)}
                   type="button"
                 >
