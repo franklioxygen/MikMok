@@ -6,6 +6,9 @@ MikMok is a self-hosted short-video app for local disks and NAS libraries. It op
 
 [中文](README-zh.md)
 
+<img width="407" height="720" alt="ezgif-440f519fc770aeca" src="https://github.com/user-attachments/assets/b91292fd-4f47-4657-8ae0-cec552046cb4" />
+
+
 ## Features
 
 - Full-screen vertical feed with swipe navigation
