@@ -1,4 +1,5 @@
 import { db } from "../../db/index.js";
+import { coerceVideoIdToCanonical } from "../integrations/videoIds.js";
 
 type PlaybackCompletionMode = "next" | "repeat" | "stop";
 
@@ -30,9 +31,18 @@ const defaultPreferences: UserPreferences = {
 
 class PreferencesService {
   getPreferences(): UserPreferences {
+    const favoriteVideoIds = Array.from(
+      new Set(
+        this.readStringArray(preferenceKeys.favoriteVideoIds, defaultPreferences.favoriteVideoIds).map((videoId) =>
+          coerceVideoIdToCanonical(videoId)
+        )
+      )
+    );
+    const lastActiveVideoId = this.readNullableString(preferenceKeys.lastActiveVideoId);
+
     return {
-      favoriteVideoIds: this.readStringArray(preferenceKeys.favoriteVideoIds, defaultPreferences.favoriteVideoIds),
-      lastActiveVideoId: this.readNullableString(preferenceKeys.lastActiveVideoId),
+      favoriteVideoIds,
+      lastActiveVideoId: lastActiveVideoId ? coerceVideoIdToCanonical(lastActiveVideoId) : null,
       playbackCompletionMode: this.readPlaybackCompletionMode(
         preferenceKeys.playbackCompletionMode,
         defaultPreferences.playbackCompletionMode
@@ -44,14 +54,17 @@ class PreferencesService {
 
   updatePreferences(patch: UserPreferencesPatch): UserPreferences {
     if (patch.favoriteVideoIds) {
-      this.writeValue(preferenceKeys.favoriteVideoIds, JSON.stringify(patch.favoriteVideoIds));
+      this.writeValue(
+        preferenceKeys.favoriteVideoIds,
+        JSON.stringify(Array.from(new Set(patch.favoriteVideoIds.map((videoId) => coerceVideoIdToCanonical(videoId)))))
+      );
     }
 
     if (patch.lastActiveVideoId !== undefined) {
       if (patch.lastActiveVideoId === null) {
         this.deleteValue(preferenceKeys.lastActiveVideoId);
       } else {
-        this.writeValue(preferenceKeys.lastActiveVideoId, patch.lastActiveVideoId);
+        this.writeValue(preferenceKeys.lastActiveVideoId, coerceVideoIdToCanonical(patch.lastActiveVideoId));
       }
     }
 

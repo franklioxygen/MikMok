@@ -52,6 +52,7 @@ authRouter.post("/login", (request: Request, response: Response) => {
   applyAuthCookies(response, session.token, session.csrfToken, session.expiresAt);
 
   sendSuccess(response, {
+    authEnabled: true,
     authenticated: true,
     sessionExpiresAt: session.expiresAt
   });
@@ -63,6 +64,7 @@ authRouter.post("/logout", (request: Request, response: Response) => {
   clearAuthCookies(response);
 
   sendSuccess(response, {
+    authEnabled: true,
     authenticated: false,
     sessionExpiresAt: null
   });
@@ -75,6 +77,7 @@ authRouter.get("/status", (request: Request, response: Response) => {
   if (!session || !token) {
     clearAuthCookies(response);
     sendSuccess(response, {
+      authEnabled: true,
       authenticated: false,
       sessionExpiresAt: null
     });
@@ -84,6 +87,7 @@ authRouter.get("/status", (request: Request, response: Response) => {
   applyAuthCookies(response, token, session.csrfToken, session.expiresAt);
 
   sendSuccess(response, {
+    authEnabled: true,
     authenticated: true,
     sessionExpiresAt: session.expiresAt
   });

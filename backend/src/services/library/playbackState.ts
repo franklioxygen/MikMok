@@ -1,4 +1,5 @@
 import { db } from "../../db/index.js";
+import { coerceVideoIdToCanonical, getLegacyLocalVideoId } from "../integrations/videoIds.js";
 
 type PlaybackState = {
   lastPlayedAt: number | null;
@@ -41,7 +42,27 @@ class PlaybackStateService {
   `);
 
   getState(videoId: string): PlaybackState {
-    const row = this.selectStatement.get(videoId);
+    const normalizedVideoId = coerceVideoIdToCanonical(videoId);
+    const row = this.selectStatement.get(normalizedVideoId);
+
+    if (!row) {
+      const legacyLocalVideoId = getLegacyLocalVideoId(normalizedVideoId);
+
+      if (legacyLocalVideoId) {
+        const legacyRow = this.selectStatement.get(legacyLocalVideoId);
+
+        if (legacyRow) {
+          const legacyState = {
+            playCount: legacyRow.play_count,
+            resumePositionSeconds: legacyRow.resume_position_seconds,
+            lastPlayedAt: legacyRow.last_played_at
+          };
+
+          this.saveState(normalizedVideoId, legacyState);
+          return legacyState;
+        }
+      }
+    }
 
     if (!row) {
       return {
@@ -59,7 +80,8 @@ class PlaybackStateService {
   }
 
   markPlay(videoId: string, positionSeconds: number): PlaybackState {
-    const currentState = this.getState(videoId);
+    const normalizedVideoId = coerceVideoIdToCanonical(videoId);
+    const currentState = this.getState(normalizedVideoId);
     const normalizedPositionSeconds = positionSeconds > 0.5 ? positionSeconds : currentState.resumePositionSeconds;
     const nextState: PlaybackState = {
       playCount: currentState.playCount + 1,
@@ -67,19 +89,20 @@ class PlaybackStateService {
       lastPlayedAt: Math.floor(Date.now() / 1000)
     };
 
-    this.saveState(videoId, nextState);
+    this.saveState(normalizedVideoId, nextState);
     return nextState;
   }
 
   reportProgress(videoId: string, update: ProgressUpdate): PlaybackState {
-    const currentState = this.getState(videoId);
+    const normalizedVideoId = coerceVideoIdToCanonical(videoId);
+    const currentState = this.getState(normalizedVideoId);
     const nextState: PlaybackState = {
       playCount: currentState.playCount,
       lastPlayedAt: currentState.lastPlayedAt,
       resumePositionSeconds: update.completed ? 0 : update.positionSeconds
     };
 
-    this.saveState(videoId, nextState);
+    this.saveState(normalizedVideoId, nextState);
     return nextState;
   }
 

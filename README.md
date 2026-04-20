@@ -6,6 +6,8 @@
 
 MikMok is a self-hosted short-video app for local disks and NAS libraries. It opens directly into a TikTok-style full-screen feed so you can browse mounted videos, uploads, and processed clips with a mobile-first playback experience.
 
+It can also connect to a remote [MyTube](https://github.com/franklioxygen/MyTube) backend as a read-only source, so local and remote libraries can appear in the same feed with proxied streams, thumbnails, and author avatars.
+
 [中文](README-zh.md)
 
 <p align="center">
@@ -20,6 +22,7 @@ MikMok is a self-hosted short-video app for local disks and NAS libraries. It op
 - Resume the last watched video and playback position after refresh
 - Mount local or NAS folders and scan them into a persistent SQLite index
 - Upload videos into the built-in `Uploads` source
+- Connect one or more remote MyTube backends and merge their videos into the same feed
 - Basic media processing pipeline for metadata, thumbnails, and transcode jobs
 - Docker-ready deployment for NAS and home server setups
 
@@ -61,3 +64,4 @@ Typical container mounts:
 - [API Endpoints](documents/api-endpoints.md)
 - [Getting Started](documents/getting-started.md)
 - [Directory Structure](documents/directory-structure.md)
+- [MyTube Connection Guide](documents/en/mytube-connection.md)

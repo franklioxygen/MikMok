@@ -108,6 +108,26 @@ export function initializeDatabase(): void {
 
     CREATE INDEX IF NOT EXISTS idx_jobs_related_entity
       ON jobs(related_entity_type, related_entity_id, created_at DESC);
+
+    CREATE TABLE IF NOT EXISTS remote_sources (
+      id TEXT PRIMARY KEY,
+      type TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      name TEXT NOT NULL,
+      base_url TEXT NOT NULL,
+      auth_mode TEXT NOT NULL,
+      api_key_encrypted TEXT,
+      session_cookie_encrypted TEXT,
+      scope_mode TEXT NOT NULL,
+      collection_ids_json TEXT NOT NULL DEFAULT '[]',
+      author_keys_json TEXT NOT NULL DEFAULT '[]',
+      last_validated_at INTEGER,
+      created_at INTEGER NOT NULL,
+      updated_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_remote_sources_type_enabled
+      ON remote_sources(type, enabled, updated_at DESC);
   `);
 
   ensureColumn("videos", "container", "TEXT");

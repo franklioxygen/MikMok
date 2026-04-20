@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 
+import { createLocalCanonicalVideoId } from "../services/integrations/videoIds.js";
 import { mediaLibraryService } from "../services/library/mediaLibrary.js";
 import { mountedFolderService } from "../services/library/mountedFolders.js";
 import { playbackStateService } from "../services/library/playbackState.js";
@@ -107,22 +108,23 @@ foldersRouter.get("/:id/videos", async (request, response) => {
   sendSuccess(
     response,
     videos.map((video) => {
-      const playbackState = playbackStateService.getState(video.id);
+      const canonicalVideoId = createLocalCanonicalVideoId(video.id);
+      const playbackState = playbackStateService.getState(canonicalVideoId);
 
       return {
-        id: video.id,
+        id: canonicalVideoId,
         folderId: video.folderId,
         folderName: video.folderName,
         title: video.title,
         sourceName: video.sourceName,
-        streamUrl: `/stream/${video.id}`,
+        streamUrl: `/stream/${encodeURIComponent(canonicalVideoId)}`,
         mimeType: video.mimeType,
         sourceSize: video.sourceSize,
         playbackStatus: video.playbackStatus,
         durationSeconds: video.durationSeconds,
         width: video.width,
         height: video.height,
-        thumbnailSmUrl: video.thumbnailSmPath ? `/api/videos/${video.id}/thumbnail-sm` : null,
+        thumbnailSmUrl: video.thumbnailSmPath ? `/api/videos/${encodeURIComponent(canonicalVideoId)}/thumbnail-sm` : null,
         updatedAt: Math.floor(video.sourceMtimeMs / 1000),
         playCount: playbackState.playCount,
         resumePositionSeconds: playbackState.resumePositionSeconds

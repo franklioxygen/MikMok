@@ -6,12 +6,23 @@ import { apiBaseUrl, apiRequest } from "../api/client";
 import { useUiStore } from "../store/uiStore";
 
 type FeedVideo = {
+  author: {
+    avatarUrl: string | null;
+    id: string;
+    name: string;
+  } | null;
+  collections: Array<{
+    id: string;
+    name: string;
+  }>;
   durationSeconds: number | null;
   folderName: string;
   height: number | null;
   id: string;
   mimeType: string;
   playbackStatus: string;
+  remoteSourceId: string | null;
+  remoteVideoId: string | null;
   sourceName: string;
   sourceSize: number;
   streamUrl: string;
@@ -23,6 +34,8 @@ type FeedVideo = {
 
 type FeedVideoDetails = {
   audioCodec: string | null;
+  author: FeedVideo["author"];
+  collections: FeedVideo["collections"];
   durationSeconds: number | null;
   fps: number | null;
   folderName: string;
@@ -33,6 +46,8 @@ type FeedVideoDetails = {
   mimeType: string;
   playCount: number;
   playbackStatus: string;
+  remoteSourceId: string | null;
+  remoteVideoId: string | null;
   resumePositionSeconds: number;
   sourceName: string;
   sourceSize: number;
@@ -1342,6 +1357,19 @@ export function FeedPage() {
     showSnackbar(willFavorite ? "Added to favorites" : "Removed from favorites");
   }
 
+  function handleAuthorOpen() {
+    const authorId = activeClip?.author?.id;
+
+    if (!authorId) {
+      return;
+    }
+
+    showControlsTemporarily();
+    startTransition(() => {
+      navigate(`/authors/${encodeURIComponent(authorId)}`);
+    });
+  }
+
   function handlePlaybackRateChange(nextPlaybackRate: number) {
     showControlsTemporarily();
     clearPlaybackRateCorrectionTimer();
@@ -1600,6 +1628,22 @@ export function FeedPage() {
           className={feedControlsVisible ? "feed-screen__side-actions" : "feed-screen__side-actions feed-screen__side-actions--hidden"}
           aria-label="Video actions"
         >
+          {activeClip.author ? (
+            <button
+              aria-label={`Open ${activeClip.author.name}`}
+              className="feed-side-action"
+              onClick={handleAuthorOpen}
+              type="button"
+            >
+              <span className="feed-side-action__badge feed-side-action__badge--avatar">
+                {activeClip.author.avatarUrl ? (
+                  <img alt={activeClip.author.name} className="feed-side-action__avatar" src={activeClip.author.avatarUrl} />
+                ) : (
+                  <span>{activeClip.author.name.slice(0, 1).toUpperCase()}</span>
+                )}
+              </span>
+            </button>
+          ) : null}
           <button
             aria-label={activeClipIsFavorite ? "Remove from favorites" : "Add to favorites"}
             aria-pressed={activeClipIsFavorite}
@@ -1686,6 +1730,21 @@ export function FeedPage() {
               <div className="feed-panel__meta">
                 <p className="eyebrow">For You</p>
                 <h1>{activeClip.title}</h1>
+                {activeClip.author ? (
+                  <button className="feed-panel__author" onClick={handleAuthorOpen} type="button">
+                    <span className="feed-panel__author-avatar" aria-hidden="true">
+                      {activeClip.author.avatarUrl ? (
+                        <img alt={activeClip.author.name} src={activeClip.author.avatarUrl} />
+                      ) : (
+                        <span>{activeClip.author.name.slice(0, 1).toUpperCase()}</span>
+                      )}
+                    </span>
+                    <span className="feed-panel__author-copy">
+                      <strong>{activeClip.author.name}</strong>
+                      <span>Open creator page</span>
+                    </span>
+                  </button>
+                ) : null}
                 <div className="tag-row">
                   <span className="pill">#{activeClip.folderName}</span>
                   <span className="pill">{activeClip.mimeType}</span>
@@ -1695,6 +1754,11 @@ export function FeedPage() {
                   <span className="pill">{activeClip.playbackStatus}</span>
                   <span className="pill">{formatPlaybackRate(playbackRate)}</span>
                   {activeClipIsFavorite ? <span className="pill pill--solid">favorited</span> : null}
+                  {activeClip.collections.map((collection) => (
+                    <span key={collection.id} className="pill">
+                      {collection.name}
+                    </span>
+                  ))}
                 </div>
                 <p className="feed-panel__subline">
                   {activeClip.sourceName} · updated {new Date(activeClip.updatedAt * 1000).toLocaleString()}

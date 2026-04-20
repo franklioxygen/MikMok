@@ -5,12 +5,23 @@ import { apiRequest } from "../api/client";
 export type PlaybackCompletionMode = "next" | "repeat" | "stop";
 
 export type CachedFeedVideo = {
+  author: {
+    avatarUrl: string | null;
+    id: string;
+    name: string;
+  } | null;
+  collections: Array<{
+    id: string;
+    name: string;
+  }>;
   durationSeconds: number | null;
   folderName: string;
   height: number | null;
   id: string;
   mimeType: string;
   playbackStatus: string;
+  remoteSourceId: string | null;
+  remoteVideoId: string | null;
   sourceName: string;
   sourceSize: number;
   streamUrl: string;

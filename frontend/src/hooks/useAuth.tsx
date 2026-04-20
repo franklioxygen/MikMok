@@ -1,6 +1,8 @@
-import { createContext, startTransition, useContext } from "react";
+import { createContext, startTransition, useContext, useEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
 import { useNavigate } from "react-router-dom";
+
+import { apiRequest } from "../api/client";
 
 type AuthStatus = {
   authEnabled: boolean;
@@ -17,18 +19,65 @@ type AuthContextValue = AuthStatus & {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const authDisabledValue: AuthContextValue = {
-  authEnabled: false,
-  authenticated: true,
-  loading: false,
-  sessionExpiresAt: null,
-  login: async () => undefined,
-  logout: async () => undefined,
-  refresh: async () => undefined
-};
-
 export function AuthProvider({ children }: PropsWithChildren) {
-  return <AuthContext.Provider value={authDisabledValue}>{children}</AuthContext.Provider>;
+  const [state, setState] = useState<AuthStatus>({
+    authEnabled: true,
+    authenticated: false,
+    sessionExpiresAt: null
+  });
+  const [loading, setLoading] = useState(true);
+
+  async function refresh() {
+    try {
+      const nextStatus = await apiRequest<AuthStatus>("/auth/status");
+      setState(nextStatus);
+    } catch {
+      setState({
+        authEnabled: true,
+        authenticated: false,
+        sessionExpiresAt: null
+      });
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function login(password: string) {
+    const nextStatus = await apiRequest<AuthStatus>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify({ password })
+    });
+
+    setState(nextStatus);
+    setLoading(false);
+  }
+
+  async function logout() {
+    const nextStatus = await apiRequest<AuthStatus>("/auth/logout", {
+      method: "POST"
+    });
+
+    setState(nextStatus);
+    setLoading(false);
+  }
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  return (
+    <AuthContext.Provider
+      value={{
+        ...state,
+        loading,
+        login,
+        logout,
+        refresh
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
 }
 
 export function useAuth() {

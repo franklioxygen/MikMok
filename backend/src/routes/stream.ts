@@ -2,8 +2,11 @@ import { stat } from "node:fs/promises";
 
 import { Router } from "express";
 
+import { myTubeAdapterService } from "../services/integrations/mytubeAdapter.js";
+import { parseCanonicalVideoId } from "../services/integrations/videoIds.js";
 import { mediaLibraryService } from "../services/library/mediaLibrary.js";
 import { isPlayablePlaybackStatus } from "../services/media/playbackPolicy.js";
+import { pipeUpstreamResponse } from "../utils/proxy.js";
 import { AppError } from "../utils/http.js";
 
 function parseRangeHeader(rangeHeader: string, fileSize: number): { end: number; start: number } | null {
@@ -42,7 +45,21 @@ function parseRangeHeader(rangeHeader: string, fileSize: number): { end: number;
 export const streamRouter = Router();
 
 streamRouter.get("/:id", async (request, response) => {
-  const video = await mediaLibraryService.findVideoById(request.params.id);
+  const parsedVideoId = parseCanonicalVideoId(request.params.id);
+
+  if (parsedVideoId?.kind === "mytube") {
+    const upstreamResponse = await myTubeAdapterService.fetchVideoStream(
+      parsedVideoId.remoteSourceId,
+      parsedVideoId.remoteVideoId,
+      request
+    );
+
+    await pipeUpstreamResponse(upstreamResponse, response);
+    return;
+  }
+
+  const localVideoId = parsedVideoId?.kind === "local" ? parsedVideoId.localVideoId : request.params.id;
+  const video = await mediaLibraryService.findVideoById(localVideoId);
 
   if (!video) {
     throw new AppError(404, "VIDEO_NOT_FOUND", "Video not found.");
